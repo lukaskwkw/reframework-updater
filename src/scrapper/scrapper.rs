@@ -13,13 +13,13 @@ pub fn scrape_latest_data(html: String) -> Result<(Vec<String>, Vec<String>), Sc
         .find(Name("a"))
         .filter_map(|node| {
             let href = node.attr("href");
-            if let None = href {
+            if href.is_none() {
                 return Some(Err(ScrapperError::NoHrefAttribute));
             }
             if href.unwrap().contains(&"/latest/") {
-                return Some(Ok(node));
+                Some(Ok(node))
             } else {
-                return None;
+                None
             }
         })
         .collect::<Result<Vec<Node>, ScrapperError>>()?;
@@ -51,7 +51,7 @@ pub fn scrape_latest_data(html: String) -> Result<(Vec<String>, Vec<String>), Sc
         .map(|node| format!("{}{}", GITHUB_URL, node.attr("href").unwrap()))
         .collect();
 
-    return Ok((links, date_time_list));
+    Ok((links, date_time_list))
 }
 
 #[test]
