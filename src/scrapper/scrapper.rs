@@ -2,7 +2,7 @@ use select::document::Document;
 use select::node::Node;
 use select::predicate::Name;
 
-use crate::ScrapperError::ScrapperError;
+use crate::scrapper::ScrapperError::ScrapperError;
 
 const GITHUB_URL: &str = "https://github.com";
 
