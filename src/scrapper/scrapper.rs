@@ -16,7 +16,7 @@ pub fn scrape_latest_data(html: String) -> Result<(Vec<String>, Vec<String>), Sc
             if href.is_none() {
                 return Some(Err(ScrapperError::NoHrefAttribute));
             }
-            if href.unwrap().contains(&"/latest/") {
+            if href?.contains(&"/latest/") {
                 Some(Ok(node))
             } else {
                 None
