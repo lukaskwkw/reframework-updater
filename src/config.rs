@@ -65,7 +65,7 @@ pub fn deserialize() -> Result<(Main, HashMap<String, Config>), Box<dyn Error>> 
 
     let (_, main_value) = table.iter().find(|(s, v)| s == &"main").ok_or("Main Not Found")?;
 
-    let main: Main =  Value::from_value(main_value.to_owned())?;
+    let main: Main = Value::from_value(main_value.to_owned())?;
 
     println!("{:?}", main);
 
