@@ -1,13 +1,13 @@
 pub const LINKS: [&str; 9] = [
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/DMC5.zip",
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/MHRISE.zip",
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE2.zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
     "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE2_TDB66.zip",
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE3.zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
     "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE3_TDB67.zip",
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE7.zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
     "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE7_TDB49.zip",
-    "https://github.com/praydog/REFramework-nightly/releases/download/latest/RE8.zip",
+    "https://github.com/praydog/REFramework-nightly/releases/download/latest/   .zip",
 ];
 
 pub const RESOURCE_TIMESTAMP: [&str; 9] = [
