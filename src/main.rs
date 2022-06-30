@@ -5,6 +5,7 @@ use fetch::fetch_file;
 
 use scrapper::scrapper::scrape_latest_data;
 use std::error;
+use unzip::unzip::unzip;
 
 mod FromValue;
 mod scrapper {
@@ -34,7 +35,7 @@ const NIGHTLY_RELEASES: &str = "https://github.com/praydog/REFramework-nightly/r
 async fn main() -> Result<(), Box<dyn error::Error>> {
     // let file_content = std::fs::read_to_string("./src/tests/releases_nightly.htm").unwrap();
 
-    let _files_to_skip = [
+    let files_to_skip = [
         "openvr_api.dll",
         "DELETE_OPENVR_API_DLL_IF_YOU_WANT_TO_USE_OPENXR",
     ];
@@ -46,6 +47,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
 
     let re = paths.first();
 
+    unzip(files_to_skip.to_vec(), re, false).unwrap();
     // let (scraped_links, _timestamps) = match scrape_latest_data(file_content) {
     //     Ok((scraped_links, timestamps)) => (scraped_links, timestamps),
     //     Err(err) => {

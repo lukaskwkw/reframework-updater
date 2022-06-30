@@ -1,10 +1,15 @@
+use crate::unzip::UnzipError::UnzipError;
 use std::error::Error;
 use std::fs;
 use std::io;
+use std::path::Path;
+use std::path::PathBuf;
 
-use crate::unzip::UnzipError::UnzipError;
-
-pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Error>> {
+pub fn unzip(
+    files_to_skip: Vec<&str>,
+    destination: Option<impl AsRef<Path>>,
+    dry_run: bool,
+) -> Result<bool, Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() < 2 {
         println!("Usage: {} <filename>", args[0]);
@@ -22,6 +27,11 @@ pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Er
             None => continue,
         };
 
+        let final_path: PathBuf = match destination.as_ref() {
+            Some(path) => path.as_ref().join(outpath),
+            None => outpath,
+        };
+
         {
             let comment = file.comment();
             if !comment.is_empty() {
@@ -30,10 +40,10 @@ pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Er
         }
 
         if (*file.name()).ends_with('/') {
-            println!("File {} extracted to \"{}\"", i, outpath.display());
-            fs::create_dir_all(&outpath)?;
+            println!("File {} extracted to \"{}\"", i, final_path.display());
+            fs::create_dir_all(&final_path)?;
         } else {
-            let file_name = match outpath.file_name() {
+            let file_name = match final_path.file_name() {
                 Some(it) => it,
                 None => return Err(Box::new(UnzipError::OutpathFileName)),
             };
@@ -45,19 +55,21 @@ pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Er
             println!(
                 "File {} extracted to \"{}\" ({} bytes)",
                 i,
-                outpath.display(),
+                final_path.display(),
                 file.size()
             );
 
             if dry_run {
+                println!("Nothing copied - dryRun!");
                 continue;
             }
-            if let Some(p) = outpath.parent() {
+            if let Some(p) = final_path.parent() {
                 if !p.exists() {
                     fs::create_dir_all(&p)?;
                 }
             }
-            let mut outfile = fs::File::create(&outpath)?;
+
+            let mut outfile = fs::File::create(&final_path)?;
             io::copy(&mut file, &mut outfile)?;
         }
 
@@ -67,7 +79,7 @@ pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Er
             use std::os::unix::fs::PermissionsExt;
 
             if let Some(mode) = file.unix_mode() {
-                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
+                fs::set_permissions(&final_path, fs::Permissions::from_mode(mode))?;
             }
         }
     }
