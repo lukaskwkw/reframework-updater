@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, str::FromStr};
 
-use crate::FromValue::FromValue;
+use crate::toml::FromValue::FromValue;
 use serde::{Deserialize, Serialize};
 use toml::{value::Datetime, Value};
 

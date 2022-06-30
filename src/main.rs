@@ -1,8 +1,8 @@
 #![feature(option_result_contains)]
 
-use crate::{steam::get_games_locations, utils::getLocalVersions};
-use config::{deserialize, serialize};
-use fetch::fetch_file;
+use crate::{steam::get_games_locations};
+use crate::utils::{local_version::getLocalVersions, version_parser, fetch::fetch_file};
+use crate::toml::config::{deserialize, serialize};
 use scrapper::scrapper::scrape_latest_data;
 use std::{
     error::{self, Error},
@@ -11,15 +11,17 @@ use std::{
 };
 use unzip::unzip::unzip;
 
-mod FromValue;
-mod utils;
+mod utils {
+    pub mod local_version;
+    pub mod version_parser;
+    pub mod fetch;
+}
 mod scrapper {
     pub mod ScrapperError;
     pub mod scrapper;
     pub mod scrapperTest;
 }
 mod steam;
-mod version_parser;
 pub mod unzip {
     pub mod UnzipError;
     pub mod unzip;
@@ -27,8 +29,10 @@ pub mod unzip {
 mod tests {
     pub mod data;
 }
-mod config;
-mod fetch;
+mod toml { 
+    pub mod config;
+    pub mod FromValue;
+}
 
 pub type VerResult = Result<String, Box<dyn Error>>;
 
