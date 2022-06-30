@@ -1,13 +1,16 @@
 use std::error;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ScrapperError {
     NotFoundAnyLinks,
     RelativeTimeNotFound,
     DateTimeNotFound,
     NoHrefAttribute,
     NoParentNode,
+    NothingToUpdate,
+    GetRepoVersion,
+    VersionParserError,
 }
 
 impl fmt::Display for ScrapperError {
@@ -22,6 +25,9 @@ impl fmt::Display for ScrapperError {
             NotFoundAnyLinks => write!(f, "Not found any links on page!"),
             NoHrefAttribute => write!(f, "No href attribute found"),
             NoParentNode => write!(f, "No parent node found"),
+            NothingToUpdate => write!(f, "No new version found"),
+            GetRepoVersion => write!(f, "Couldn't retrieve repo version"),
+            VersionParserError => write!(f, "Something went wrong when parsing version"),
         }
     }
 }

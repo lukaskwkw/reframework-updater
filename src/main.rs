@@ -1,8 +1,8 @@
 #![feature(option_result_contains)]
 
+use crate::steam::getGamesLocations;
 use config::{deserialize, serialize};
 use fetch::fetch_file;
-
 use scrapper::scrapper::scrape_latest_data;
 use std::error;
 use unzip::unzip::unzip;
@@ -11,12 +11,10 @@ mod FromValue;
 mod scrapper {
     pub mod ScrapperError;
     pub mod scrapper;
+    pub mod scrapperTest;
 }
-
 mod steam;
-
-use crate::steam::getGamesLocations;
-
+mod version_parser;
 pub mod unzip {
     pub mod UnzipError;
     pub mod unzip;
@@ -24,10 +22,8 @@ pub mod unzip {
 mod tests {
     pub mod data;
 }
-
-mod fetch;
-
 mod config;
+mod fetch;
 
 const NIGHTLY_RELEASES: &str = "https://github.com/praydog/REFramework-nightly/releases";
 
