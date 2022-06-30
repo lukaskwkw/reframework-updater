@@ -1,8 +1,8 @@
 use std::{collections::HashMap, error::Error, str::FromStr};
 
+use crate::FromValue::FromValue;
 use serde::{Deserialize, Serialize};
 use toml::{value::Datetime, Value};
-use crate::FromValue::FromValue;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum Runtime {
@@ -63,9 +63,12 @@ pub fn deserialize() -> Result<(Main, HashMap<String, Config>), Box<dyn Error>> 
 
     let table = value.as_table().ok_or("No table fields!")?;
 
-    let (_, main_value) = table.iter().find(|(s, v)| s == &"main").ok_or("Main Not Found")?;
+    let (_, main_value) = table
+        .iter()
+        .find(|(s, v)| s == &"main")
+        .ok_or("Main Not Found")?;
 
-    let main: Main =  Value::from_value(main_value.to_owned())?;
+    let main: Main = Value::from_value(main_value.to_owned())?;
 
     println!("{:?}", main);
 

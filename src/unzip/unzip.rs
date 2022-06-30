@@ -49,7 +49,7 @@ pub fn unzip(files_to_skip: Vec<&str>, dry_run: bool) -> Result<bool, Box<dyn Er
                 file.size()
             );
 
-            if (dry_run) {
+            if dry_run {
                 continue;
             }
             if let Some(p) = outpath.parent() {
