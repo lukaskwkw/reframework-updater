@@ -1,15 +1,33 @@
 use select::document::Document;
 use select::node::Node;
-use select::predicate::Name;
+use select::predicate::{Class, Name};
 
 use crate::scrapper::ScrapperError::ScrapperError;
+use crate::version_parser::isRepoVersionNewer;
 
 const GITHUB_URL: &str = "https://github.com";
 
-pub fn scrape_latest_data(html: String) -> Result<(Vec<String>, Vec<String>), ScrapperError> {
-    let what = html.as_str();
-    let next_what = Document::from(what);
-    let latest_link_nodes = next_what
+pub fn scrape_latest_data(
+    html: String,
+    local_version: &str,
+) -> Result<(Vec<String>, String), ScrapperError> {
+    let document = Document::from(html.as_str());
+
+    let repo_version_collection = document
+        .find(Class("Link--primary"))
+        .take(1)
+        .map(|node| node.text())
+        .collect::<Vec<String>>();
+
+    let repo_version = repo_version_collection
+        .first()
+        .ok_or(ScrapperError::GetRepoVersion)?;
+
+    if !isRepoVersionNewer(&local_version, repo_version).ok_or(ScrapperError::VersionParserError)? {
+        return Err(ScrapperError::NothingToUpdate);
+    }
+
+    let latest_link_nodes = document
         .find(Name("a"))
         .filter_map(|node| {
             let href = node.attr("href");
@@ -28,42 +46,10 @@ pub fn scrape_latest_data(html: String) -> Result<(Vec<String>, Vec<String>), Sc
         return Err(ScrapperError::NotFoundAnyLinks);
     }
 
-    let date_time_list = latest_link_nodes
-        .iter()
-        .map(|node| -> Result<String, ScrapperError> {
-            Ok(node
-                .parent()
-                .ok_or(ScrapperError::NoParentNode)?
-                .parent()
-                .ok_or(ScrapperError::NoParentNode)?
-                .find(Name("relative-time"))
-                .collect::<Vec<Node>>()
-                .first()
-                .ok_or(ScrapperError::RelativeTimeNotFound)?
-                .attr("datetime")
-                .ok_or(ScrapperError::DateTimeNotFound)?)
-            .map(|url| url.to_string())
-        })
-        .collect::<Result<Vec<String>, ScrapperError>>()?;
-
     let links: Vec<String> = latest_link_nodes
         .iter()
         .map(|node| format!("{}{}", GITHUB_URL, node.attr("href").unwrap()))
         .collect();
 
-    Ok((links, date_time_list))
-}
-
-#[test]
-fn it_correctly_scrape_data() {
-    use crate::tests::data::{LINKS, RESOURCE_TIMESTAMP};
-
-    let file_content = std::fs::read_to_string("./src/tests/releases_nightly.htm").unwrap();
-
-    let (scraped_links, timestamps) = match scrape_latest_data(file_content) {
-        Ok((scraped_links, timestamps)) => (scraped_links, timestamps),
-        Err(err) => panic!("{}", err),
-    };
-    assert_eq!(LINKS, scraped_links[..]);
-    assert_eq!(RESOURCE_TIMESTAMP, timestamps[..]);
+    Ok((links, repo_version.to_owned()))
 }
