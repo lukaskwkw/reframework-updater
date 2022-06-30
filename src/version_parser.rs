@@ -1,6 +1,9 @@
+const VERSION_DELIMETER: char = '.';
+const HASH_DELIMETERE: char = '-';
+
 fn get_version_tuple(text: &str) -> Option<(&str, &str, &str)> {
-    let (major, minor_a_hash) = text[1..].split_once('.')?;
-    let (minor, hash) = minor_a_hash.split_once('-')?;
+    let (major, minor_a_hash) = text[1..].split_once(VERSION_DELIMETER)?;
+    let (minor, hash) = minor_a_hash.split_once(HASH_DELIMETERE)?;
     Some((major, minor, hash))
 }
 

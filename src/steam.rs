@@ -1,11 +1,10 @@
-use std::{
-    error::Error,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use game_scanner::{manager, prelude::Game, steam};
 
-pub fn getGamesLocations(game_ids: Vec<&str>) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+use crate::DynResult;
+
+pub fn get_games_locations(game_ids: Vec<&str>) -> DynResult<Vec<PathBuf>> {
     let games = steam::games()?;
 
     let paths: Vec<PathBuf> = games
@@ -20,7 +19,7 @@ pub fn getGamesLocations(game_ids: Vec<&str>) -> Result<Vec<PathBuf>, Box<dyn Er
     return Ok(paths);
 }
 
-pub fn runGame(game: &Game) -> Result<(), Box<dyn Error>> {
+pub fn run_game(game: &Game) -> DynResult<()> {
     manager::launch_game(game)?;
     Ok(())
 }

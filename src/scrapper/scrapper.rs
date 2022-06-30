@@ -6,6 +6,8 @@ use crate::scrapper::ScrapperError::ScrapperError;
 use crate::version_parser::isRepoVersionNewer;
 
 const GITHUB_URL: &str = "https://github.com";
+const CLASS_TO_FIND_VERSION_HEADER: &str = "Link--primary";
+const PART_OF_FRESH_LINK: &str = "/latest/";
 
 pub fn scrape_latest_data(
     html: String,
@@ -14,7 +16,7 @@ pub fn scrape_latest_data(
     let document = Document::from(html.as_str());
 
     let repo_version_collection = document
-        .find(Class("Link--primary"))
+        .find(Class(CLASS_TO_FIND_VERSION_HEADER))
         .take(1)
         .map(|node| node.text())
         .collect::<Vec<String>>();
@@ -34,7 +36,7 @@ pub fn scrape_latest_data(
             if href.is_none() {
                 return Some(Err(ScrapperError::NoHrefAttribute));
             }
-            if href?.contains(&"/latest/") {
+            if href?.contains(PART_OF_FRESH_LINK) {
                 Some(Ok(node))
             } else {
                 None

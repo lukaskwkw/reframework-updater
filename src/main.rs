@@ -1,13 +1,18 @@
 #![feature(option_result_contains)]
 
-use crate::steam::getGamesLocations;
+use crate::{steam::get_games_locations, utils::getLocalVersions};
 use config::{deserialize, serialize};
 use fetch::fetch_file;
 use scrapper::scrapper::scrape_latest_data;
-use std::error;
+use std::{
+    error::{self, Error},
+    thread,
+    time::Duration,
+};
 use unzip::unzip::unzip;
 
 mod FromValue;
+mod utils;
 mod scrapper {
     pub mod ScrapperError;
     pub mod scrapper;
@@ -25,6 +30,10 @@ mod tests {
 mod config;
 mod fetch;
 
+pub type VerResult = Result<String, Box<dyn Error>>;
+
+pub type DynResult<T> = Result<T, Box<dyn Error>>;
+
 const NIGHTLY_RELEASES: &str = "https://github.com/praydog/REFramework-nightly/releases";
 
 #[tokio::main]
@@ -39,13 +48,18 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     // let steam_folder = "C:\\Program Files (x86)\\Steam";
     // getLibraryFoldersFile(steam_folder);
     let ids = vec!["1446780", "601150", "418370", "1196590", "952060", "883710"];
-    let paths = getGamesLocations(ids).unwrap();
-
+    let paths = get_games_locations(ids).unwrap();
     let re = paths.first();
+    println!("{:?}", re);
 
-    unzip(files_to_skip.to_vec(), re, false).unwrap();
+    getLocalVersions(&paths)
+        .unwrap()
+        .iter()
+        .for_each(|p| println!("{:?}", p.as_ref().unwrap()));
+
+    // unzip(files_to_skip.to_vec(), re, false).unwrap();
     // let (scraped_links, _timestamps) = match scrape_latest_data(file_content) {
-    //     Ok((scraped_links, timestamps)) => (scraped_links, timestamps),
+    //     Ok((scraped_links, timestamps)) => (scraped_lin`ks, timestamps),
     //     Err(err) => {
     //         // runGame() // runGame anyway
     //         return Err(err.to_string())?;
@@ -58,6 +72,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     deserialize().unwrap();
 
     println!("what");
+    thread::sleep(Duration::from_secs(30));
 
     // fetch_file(&scraped_links[6], None).await?;
 
