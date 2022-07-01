@@ -1,0 +1,25 @@
+[main]
+sources = [
+    'normal',
+    'nightly',
+]
+autoupdate = true
+
+[RE7]
+location = 'D:/steam/games/RE7'
+versions = ['1.71-abd314']
+
+[RE12]
+location = 'D:/steam/games/RE12'
+versions = ['1.71-abd314']
+runtime = 'OpenVR'
+
+[RE2]
+location = 'D:/steam/games/RE2'
+versions = [
+    '1.71-abd314',
+    '1.70-axx314',
+]
+nextgen = true
+runtime = 'OpenXR'
+
