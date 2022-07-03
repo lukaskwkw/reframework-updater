@@ -1,4 +1,4 @@
-use log::{debug};
+// use log::{debug, trace};
 use std::{
     fs::{File},
     io::{self, Read, Seek, SeekFrom},
@@ -97,9 +97,12 @@ pub fn find_string_in_binary_file(file: impl AsRef<Path>, text: &str) -> io::Res
     let mut file = std::fs::File::open(file)?;
     let mut is_success = perform_find_in_chunks(&file, text, 0x500)?;
     if !is_success {
-        debug!("\nNot found in chunks in {:?} Searching one more time with new buffer size. \n", file);
+        println!("Not found {} in chunks in \n {:?} Searching one more time with new buffer size.", text, file);
         file.rewind()?;
         is_success = perform_find_in_chunks(&file, text, 0x500 + 0xA)?;        
+    }
+    if !is_success {
+        println!("Second time not found {} in chunks in. Treating like it is nextgen version then", text);
     }
 
     Ok(is_success)
@@ -107,25 +110,29 @@ pub fn find_string_in_binary_file(file: impl AsRef<Path>, text: &str) -> io::Res
 
 fn perform_find_in_chunks(file: &File, text: &str, chunk_size: usize) -> io::Result<bool> {
     let iter = Chunks::from_seek(file, chunk_size)?;
-    debug!("size hint {:?}", iter.size_hint());
+    println!("size hint {:?}", iter.size_hint());
     let chunks = iter.collect::<Result<Vec<_>, _>>()?;
-    debug!("len {:?}, capacity {:?}", chunks.len(), chunks.capacity());
+    println!("len {:?}, capacity {:?}", chunks.len(), chunks.capacity());
 
     let mut index = 0;
     let mut able_to_found: bool = false;
+    // let pb = ProgressBar::new(chunks.len() as u64);
+    // chunks.iter().progress().fo
     while index < chunks.len() {
+        // pb.inc(index as u64);
         let found = find_subsequence(&chunks[index], text.as_bytes());
         index += 1;
 
         match found {
             Some(pos) => {
                 able_to_found = true;
-                debug!("found at {} at {} chunk", pos, index);
+                println!("found at {} at {} chunk", pos, index);
                 break;
             }
             None => continue,
         }
     }
+    // pb.finish_with_message("done");
     Ok(able_to_found)
 }
 
@@ -136,7 +143,7 @@ mod tests {
     use crate::utils::binSearch::{find_subsequence, find_string_in_binary_file};
 
     fn init() {
-        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+        env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
     }
 
     // #[test]

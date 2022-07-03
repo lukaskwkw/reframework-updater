@@ -6,7 +6,7 @@ use std::{
 
 use crate::tomlConf::configStruct::Runtime;
 use error_stack::{IntoReport, Report, Result, ResultExt};
-use log::{debug, warn};
+// use log::{debug, warn};
 
 use super::binSearch::find_string_in_binary_file;
 
@@ -56,7 +56,7 @@ fn map_to_nextgen(path: impl AsRef<Path>, game_short_name: &str) -> Option<bool>
         let is_standard_edition = match find_string_in_binary_file(&dinput8_path, &text) {
             Ok(it) => it,
             Err(err) => {
-                warn!(
+                println!(
                     "Reading binary file {} failed: {:?}",
                     dinput8_path.display(),
                     err
@@ -79,8 +79,8 @@ fn map_to_runtime(path: impl AsRef<Path>) -> Option<Runtime> {
     if Path::new(&open_xr_runtime).exists() {
         return Some(Runtime::OpenXR);
     }
-    debug!("open_vr_runtime not found {:?}", open_vr_runtime);
-    debug!("open_xr_runtime not found {:?}", open_xr_runtime);
+    println!("open_vr_runtime not found {:?}", open_vr_runtime);
+    println!("open_xr_runtime not found {:?}", open_xr_runtime);
     None
 }
 
@@ -97,12 +97,12 @@ fn map_to_version(path: impl AsRef<Path>) -> Option<String> {
         }) {
         Ok(it) => it,
         Err(err) => {
-            warn!("{:?}", err);
+            println!("{:?}", err);
             return None;
         }
     };
     if version.len() < 7 {
-        warn!(
+        println!(
             "version {:?} in file {} might be corrupted - version.len is lower than 7 chars",
             version,
             version_file.display()

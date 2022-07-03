@@ -21,6 +21,20 @@ impl std::fmt::Display for ConfigError {
 
 impl Error for ConfigError {}
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub enum ErrorLevel {
+    info,
+    debug,
+    warn,
+    error,
+    trace
+}
+
+impl std::fmt::Display for ErrorLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Runtime {
@@ -53,6 +67,7 @@ pub struct Main {
     pub autoupdate: Option<bool>,
     pub steamExePath: Option<String>,
     pub steamGamesIdToSearchFor: Option<Vec<String>>,
+    pub errorLevel: Option<ErrorLevel>,
 }
 
 pub type ShortGameName = String;
