@@ -21,7 +21,7 @@ impl std::fmt::Display for ConfigError {
 
 impl Error for ConfigError {}
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, clap::ValueEnum, Clone)]
 pub enum ErrorLevel {
     info,
     debug,

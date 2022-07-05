@@ -15,6 +15,7 @@ mod utils {
     pub mod local_version;
     pub mod version_parser;
     pub mod mslink;
+    pub mod progress_style;
 }
 
 mod steam;
@@ -29,6 +30,7 @@ pub mod strategy {
     pub mod StrategyFactory;
 }
 mod rManager;
+mod args;
 mod tomlConf {
     pub mod FromValue;
     pub mod config;

@@ -6,12 +6,15 @@ use crate::{
         config::ConfigProvider,
         configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime},
     },
-    utils::local_version::LocalFiles,
+    utils::{local_version::LocalFiles, progress_style},
     DynResult, GAMES,
 };
 use env_logger::Env;
 use error_stack::{Report, Result, ResultExt};
 use log::{debug, info, trace, warn};
+use std::time::Duration;
+
+use indicatif::{ProgressBar};
 
 #[derive(Debug)]
 pub struct REvilManagerError;
@@ -90,7 +93,7 @@ impl REvilThings for REvilManager {
             .load_from_file()
             .change_context(REvilManagerError)?;
         self.config = config;
-
+        self.attach_logger();
         Ok(self)
     }
 
@@ -102,7 +105,6 @@ impl REvilThings for REvilManager {
             Ok(it) => Ok(it),
             Err(err) => {
                 cb(&err, self);
-                // return Err(err);
                 return Ok(self);
             }
         };
@@ -161,34 +163,46 @@ impl REvilThings for REvilManager {
     }
 
     fn get_local_settings_per_game(&mut self) -> &mut Self {
+        let pb = ProgressBar::new_spinner();
+        pb.enable_steady_tick(Duration::from_millis(80).as_secs());
+        pb.set_style(progress_style::getProgressStyle());
         for (short_name, config) in self.config.games.iter_mut() {
             let game_location = config.location.as_ref().unwrap();
+            pb.set_message(format!("Loading config from {} ...", game_location));
+            pb.tick();
             let local_config = self
                 .local_provider
                 .get_local_report_for_game(&game_location, short_name);
-
             config.runtime = local_config.runtime;
             if local_config.version.is_some() {
                 config.versions = Some([local_config.version.unwrap()].to_vec());
             }
             config.nextgen = local_config.nextgen;
         }
+        pb.finish_with_message("Done");
+
         trace!("Full config: \n {:#?}", self.config);
         self
     }
 
     fn attach_logger(&mut self) -> Result<&mut Self, REvilManagerError> {
-        env_logger::Builder::from_env(
-            Env::default().default_filter_or(
-                self.config
-                    .main
-                    .errorLevel
-                    .as_ref()
-                    .ok_or(REvilManagerError)?
-                    .to_string(),
-            ),
-        )
-        .init();
+        let env = Env::default().filter_or(
+            "NONENENENE",
+            self.config
+                .main
+                .errorLevel
+                .as_ref()
+                .ok_or(REvilManagerError)?
+                .to_string(),
+        );
+
+        match env_logger::Builder::from_env(env).try_init() {
+            Ok(it) => it,
+            Err(err) => {
+                debug!("Logger already initialized {}", err);
+                return Ok(self);
+            }
+        };
         Ok(self)
     }
 
