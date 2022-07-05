@@ -46,3 +46,11 @@ impl SteamThings for SteamManager {
         Ok(())
     }
 }
+
+/* TODO
+     game.commands.launch = Some(vec![
+        launcher_executable.display().to_string(),
+        String::from("-silent"),
+        format!("steam://run/{}", &game.id),
+    ]);
+*/
