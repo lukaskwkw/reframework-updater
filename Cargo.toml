@@ -2,7 +2,6 @@
 name = "reframework-updater"
 version = "0.1.0"
 edition = "2021"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -10,6 +9,7 @@ env_logger = "0.9.0"
 error-stack = "0.1.1"
 futures = "0.3.21"
 game-scanner = "1.1.4"
+indicatif = "0.16.2"
 log = "0.4.17"
 reqwest = "0.11.11"
 self_update = "0.30.0"
@@ -27,3 +27,6 @@ strip = true        # Strip symbols from binary*
 
 [target.'cfg(windows)'.dependencies]
 mslnk = "0.1.8"
+
+[build-dependencies]
+winres = "0.1.12"

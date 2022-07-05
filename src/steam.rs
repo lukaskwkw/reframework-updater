@@ -1,17 +1,33 @@
-use crate::DynResult;
+use core::fmt;
+use error_stack::{IntoReport, Report, Result, ResultExt};
 use game_scanner::{manager, prelude::Game, steam};
-use std::path::PathBuf;
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+};
 
 pub struct SteamManager;
+#[derive(Debug)]
+pub struct SteamError;
+impl Display for SteamError {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
+        fmt.write_str("Steam error")
+    }
+}
+
+type SteamResult<T> = Result<T, SteamError>;
+
+impl Error for SteamError {}
 
 pub trait SteamThings {
-    fn get_games_locations(&self, game_ids: &Vec<&str>) -> DynResult<Vec<(String, PathBuf)>>;
-    fn run_game(&self, game: &Game) -> DynResult<()>;
+    fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>>;
+    fn run_game(&self, game: &Game) -> SteamResult<()>;
 }
 
 impl SteamThings for SteamManager {
-    fn get_games_locations(&self, game_ids: &Vec<&str>) -> DynResult<Vec<(String, PathBuf)>> {
-        let games = steam::games()?;
+    fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>> {
+        let games = steam::games().report().change_context(SteamError)?;
 
         let game_path_vec: Vec<(String, PathBuf)> = games
             .iter()
@@ -25,8 +41,8 @@ impl SteamThings for SteamManager {
         return Ok(game_path_vec);
     }
 
-    fn run_game(&self, game: &Game) -> DynResult<()> {
-        manager::launch_game(game)?;
+    fn run_game(&self, game: &Game) -> SteamResult<()> {
+        manager::launch_game(game).report().change_context(SteamError)?;
         Ok(())
     }
 }

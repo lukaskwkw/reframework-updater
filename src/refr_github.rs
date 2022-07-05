@@ -31,7 +31,9 @@ impl REFRGithub {
             .repo_owner(&self.repo_owner)
             .build()?
             .fetch()?;
-
+        // TODO maybe store Rekease in manager state (new field) 
+        // or create here new field and populate then filter out TDB assets
+        // or maybe sto
         let first = releases.first().ok_or("Releases not found")?;
         // let first = releases.first().ok_or("Releases not found")?;
         // self.release = Some(first);
