@@ -68,6 +68,7 @@ pub struct Main {
     pub steamExePath: Option<String>,
     pub steamGamesIdToSearchFor: Option<Vec<String>>,
     pub errorLevel: Option<ErrorLevel>,
+
 }
 
 pub type ShortGameName = String;
