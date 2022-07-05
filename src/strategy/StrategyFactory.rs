@@ -1,9 +1,9 @@
 use std::process;
 
-use error_stack::report;
+use clap::Parser;
 use log::{error, info, warn};
 
-use crate::rManager::{REvilManager, REvilThings};
+use crate::{rManager::{REvilManager, REvilThings}, args::{ArgsClap, parse_args}};
 
 pub struct StrategyFactory;
 
@@ -22,6 +22,10 @@ impl StrategyFactory {
         Self {}
     }
     pub fn get_strategy(manager: &mut REvilManager) -> impl Fn(&mut REvilManager) -> () {
+        parse_args();
+        NormalRoute::run
+    }
+    pub fn get_strategy_obsolete(manager: &mut REvilManager) -> impl Fn(&mut REvilManager) -> () {
         let strategy = match manager.load_config() {
             Ok(t) => ConfigFileFound::run,
             Err(e) => {
