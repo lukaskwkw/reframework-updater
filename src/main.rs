@@ -1,21 +1,24 @@
 #[cfg(target_os = "windows")]
-use rManager::{REvilManager};
-use strategy::StrategyFactory::StrategyFactory;
-use std::{
-    error::{self, Error},
-};
+use rManager::REvilManager;
+use reframework_github::refr_github::{self, REFRGithub};
+use core::time;
+use std::{error::{self, Error}, thread};
 use steam::SteamManager;
-use tomlConf::config::{REvilConfigProvider};
+use strategy::StrategyFactory::StrategyFactory;
+use tomlConf::config::REvilConfigProvider;
 use utils::local_version::LocalProvider;
 
-mod refr_github;
+pub mod reframework_github {
+    pub mod refr_github;
+    pub mod release;
+}
 mod utils {
     pub mod binSearch;
     pub mod fetch;
     pub mod local_version;
-    pub mod version_parser;
     pub mod mslink;
     pub mod progress_style;
+    pub mod version_parser;
 }
 
 mod steam;
@@ -29,8 +32,8 @@ mod tests {
 pub mod strategy {
     pub mod StrategyFactory;
 }
-mod rManager;
 mod args;
+mod rManager;
 mod tomlConf {
     pub mod FromValue;
     pub mod config;
@@ -41,7 +44,8 @@ mod tomlConf {
 
 pub type DynResult<T> = Result<T, Box<dyn Error>>;
 
-const NIGHTLY_RELEASES: &str = "https://github.com/praydog/REFramework-nightly/releases";
+static NIGHTLY_RELEASE: &str = "REFramework-nightly";
+static REPO_OWNER: &str = "praydog";
 static GAMES: [(&str, &str); 6] = [
     ("601150", "DMC5"),
     ("1446780", "MHRISE"),
@@ -56,8 +60,13 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let config_provider = Box::new(REvilConfigProvider::new("config.toml"));
     let steam_menago = Box::new(SteamManager);
     let local_provider = Box::new(LocalProvider);
-    let mut evilManager = REvilManager::new(config_provider, local_provider, steam_menago);
-    
+    let mut evilManager = REvilManager::new(
+        config_provider,
+        local_provider,
+        steam_menago,
+        REFRGithub::new,
+    );
+
     let strategy = StrategyFactory::get_strategy(&mut evilManager);
     strategy(&mut evilManager);
     Ok(())

@@ -12,7 +12,7 @@ pub fn convert_args_to_config() {
         print!("About to run {} are you happy now?!:) \n", args[2]);
     }
 }
-/// Simple program to greet a person
+/// Updater for reframework mod games
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct ArgsClap {

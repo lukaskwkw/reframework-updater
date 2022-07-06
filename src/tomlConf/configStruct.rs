@@ -64,6 +64,8 @@ pub struct GameConfig {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Main {
     pub sources: Option<Vec<String>>,
+    pub repo_owner: Option<String>,
+    pub chosen_source: Option<String>,
     pub autoupdate: Option<bool>,
     pub steamExePath: Option<String>,
     pub steamGamesIdToSearchFor: Option<Vec<String>>,
