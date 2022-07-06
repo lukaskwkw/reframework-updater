@@ -1,6 +1,7 @@
-use log::{debug};
+use log::debug;
+use rand::{self, Rng, thread_rng};
 use std::{
-    fs::{File},
+    fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::Path,
 };
@@ -45,6 +46,8 @@ impl<R> Chunks<R> {
         self.read
     }
 }
+
+const BUFFER_SIZE: usize = 0xFF;
 
 impl<R> Iterator for Chunks<R>
 where
@@ -95,11 +98,20 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 pub fn find_string_in_binary_file(file: impl AsRef<Path>, text: &str) -> io::Result<bool> {
     let mut file = std::fs::File::open(file)?;
-    let mut is_success = perform_find_in_chunks(&file, text, 0x500)?;
+    let mut is_success = perform_find_in_chunks(&file, text, BUFFER_SIZE)?;
     if !is_success {
-        debug!("\nNot found in chunks in {:?} Searching one more time with new buffer size. \n", file);
+        let mut rng = thread_rng();
+        let random_plus: u32 = rng.gen_range(10..256);
+
+        let new_buff_size = BUFFER_SIZE + random_plus as usize;
+        debug!(
+            "\nNot found in chunks in {:?} Searching one more time with new buffer size {}. \n",
+            file,
+            new_buff_size
+        );
         file.rewind()?;
-        is_success = perform_find_in_chunks(&file, text, 0x500 + 0xA)?;        
+
+        is_success = perform_find_in_chunks(&file, text, BUFFER_SIZE + random_plus as usize)?;
     }
 
     Ok(is_success)
@@ -133,7 +145,7 @@ fn perform_find_in_chunks(file: &File, text: &str, chunk_size: usize) -> io::Res
 mod tests {
     use env_logger::Env;
 
-    use crate::utils::binSearch::{find_subsequence, find_string_in_binary_file};
+    use crate::utils::binSearch::{find_string_in_binary_file, find_subsequence};
 
     fn init() {
         env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
