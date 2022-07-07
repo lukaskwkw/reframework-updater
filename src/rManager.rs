@@ -9,8 +9,13 @@ use crate::{
         config::ConfigProvider,
         configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime},
     },
-    utils::{local_version::LocalFiles, progress_style, version_parser::isRepoVersionNewer},
-    DynResult, GAMES, NIGHTLY_RELEASE, REPO_OWNER,
+    utils::{
+        init_logger::{self, init_logger},
+        local_version::LocalFiles,
+        progress_style,
+        version_parser::isRepoVersionNewer,
+    },
+    DynResult, GAMES, NIGHTLY_RELEASE, REPO_OWNER, ARGS,
 };
 use env_logger::Env;
 use error_stack::{Report, Result, ResultExt};
@@ -85,7 +90,7 @@ impl REvilManager {
                     autoupdate: None,
                     steamExePath: None,
                     steamGamesIdToSearchFor: None,
-                    errorLevel: Some(ErrorLevel::debug),
+                    errorLevel: None,
                     repo_owner: None,
                     chosen_source: None,
                 },
@@ -107,9 +112,14 @@ impl REvilThings for REvilManager {
         let config = self
             .config_provider
             .load_from_file()
-            .change_context(REvilManagerError)?;
+            .change_context(REvilManagerError)
+            .or_else(|err| {
+                self.attach_logger()?;
+                self.config.main.errorLevel = Some(ErrorLevel::info);
+                return Err(err);
+            })?;
         self.config = config;
-        self.attach_logger();
+        self.attach_logger()?;
         Ok(self)
     }
 
@@ -212,23 +222,20 @@ impl REvilThings for REvilManager {
     }
 
     fn attach_logger(&mut self) -> Result<&mut Self, REvilManagerError> {
-        let env = Env::default().filter_or(
-            "NONENENENE",
+        let level;
+        unsafe {
+            level = &ARGS.as_ref().unwrap().level;
+        }
+        init_logger(
             self.config
                 .main
                 .errorLevel
                 .as_ref()
-                .ok_or(REvilManagerError)?
-                .to_string(),
+                .unwrap_or(level)
+                .to_string()
+                .as_ref(),
         );
 
-        match env_logger::Builder::from_env(env).try_init() {
-            Ok(it) => it,
-            Err(err) => {
-                debug!("Logger already initialized {}", err);
-                return Ok(self);
-            }
-        };
         Ok(self)
     }
 

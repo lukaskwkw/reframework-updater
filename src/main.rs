@@ -1,3 +1,5 @@
+use args::ArgsClap;
+use clap::Parser;
 #[cfg(target_os = "windows")]
 use rManager::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
@@ -19,6 +21,7 @@ mod utils {
     pub mod mslink;
     pub mod progress_style;
     pub mod version_parser;
+    pub mod init_logger;
 }
 
 mod steam;
@@ -55,6 +58,8 @@ static GAMES: [(&str, &str); 6] = [
     ("1196590", "RE8"),
 ];
 
+static mut ARGS: Option<ArgsClap> = None;
+
 // #[tokio::main]
 fn main() -> Result<(), Box<dyn error::Error>> {
     let config_provider = Box::new(REvilConfigProvider::new("config.toml"));
@@ -71,12 +76,3 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     strategy(&mut evilManager);
     Ok(())
 }
-
-/* TODO game.exe STEAMAppID
-MonsterHunterRise.exe 1446780
-DevilMayCry5.exe 601150
-re7.exe 418370
-re8.exe 1196590
-re3.exe 952060
-re2.exe 883710
-*/

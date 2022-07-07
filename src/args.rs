@@ -1,7 +1,7 @@
 use clap::Parser;
 use env_logger::Env;
 
-use crate::tomlConf::configStruct::ErrorLevel;
+use crate::{tomlConf::configStruct::ErrorLevel, ARGS};
 
 pub fn convert_args_to_config() {
     let args: Vec<_> = std::env::args().collect();
@@ -18,19 +18,14 @@ pub fn convert_args_to_config() {
 pub struct ArgsClap {
     /// Shortname of game you want to launch
     #[clap(short, long, value_parser, default_value = "none")]
-    run: String,
+    pub run: String,
 
     /// Debug level please use one of following: info, debug, warn, error, trace
     #[clap(short, long, value_enum, default_value = "info")]
-    level: ErrorLevel,
+    pub level: ErrorLevel,
 }
 
-pub fn parse_args() {
+pub unsafe fn parse_args() {
     let args = ArgsClap::parse();
-
-    let env = Env::default().filter_or(
-        "NONENENENE",
-        args.level.to_string()
-    );
-    env_logger::Builder::from_env(env).init();
+    ARGS = Some(args);
 }
