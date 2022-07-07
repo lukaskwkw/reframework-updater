@@ -75,7 +75,10 @@ impl Strategy for BindStrategy {
             .bind(|this| Ok(this.check_for_REFramework_update()), Level::Error)
             .bind(|this| Ok(this.ask_for_decision()), Level::Error)
             .bind(|this| {
-                Ok(this.download_REFramework_update())
+                this.download_REFramework_update()
+            }, Level::Error)
+            .bind(|this| {
+                this.unzip_updates()
             }, Level::Error)
             .save_config().unwrap();
 
