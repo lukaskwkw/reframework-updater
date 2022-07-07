@@ -1,6 +1,6 @@
 #![feature(explicit_generic_args_with_impl_trait)]
 
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, ops::RangeBounds, rc::Rc};
 
 use crate::{
     create_TDB_string,
@@ -8,7 +8,7 @@ use crate::{
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime},
+        configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime, ShortGameName},
     },
     utils::{
         init_logger::{self, init_logger},
@@ -22,6 +22,7 @@ use dialoguer::{theme::ColorfulTheme, Select};
 use env_logger::Env;
 use error_stack::{Report, Result, ResultExt};
 use log::{debug, info, log, trace, warn, Level};
+use self_update::update::ReleaseAsset;
 use std::time::Duration;
 
 use indicatif::ProgressBar;
@@ -44,14 +45,30 @@ pub struct REvilManager {
     steam_menago: Box<dyn SteamThings>,
     local_provider: Box<dyn LocalFiles>,
     github_release_manager: Option<Box<dyn ManageGithub>>,
-    refr_ctor: fn(&str, &str, &str) -> REFRGithub,
+    refr_ctor: fn(&str, &str) -> REFRGithub,
+    selected_assets: Vec<ReleaseAsset>,
 }
 
 type ResultManagerErr<T> = Result<T, REvilManagerError>;
+type FileName = String;
 
 // pub trait Callback<'a>: Fn(&'a Report<REvilManagerError>, &'a mut REvilManager) {}
 
 // impl<'a, T> Callback<'a> for T where T: Fn(&'a Report<REvilManagerError>, &'a mut REvilManager) {}
+
+const SORT_DETERMINER: &str = "info";
+
+impl REvilManager {
+    pub fn sort(a: &str, b: &str) -> Ordering {
+        if a.contains(&SORT_DETERMINER) && !b.contains(&SORT_DETERMINER) {
+            Ordering::Greater
+        } else if !a.contains(&SORT_DETERMINER) && !b.contains(&SORT_DETERMINER)   {
+            Ordering::Equal
+        } else {
+            Ordering::Less
+        }
+    }
+}
 
 pub trait REvilThings {
     fn load_config(&mut self) -> Result<&mut Self, REvilManagerError>;
@@ -61,8 +78,8 @@ pub trait REvilThings {
     fn get_local_settings_per_game(&mut self) -> &mut Self;
     fn check_for_REFramework_update(&mut self) -> &mut Self;
     fn ask_for_decision(&mut self) -> &mut Self;
-    fn download_REFramework_update(&mut self) -> &mut Self;
-    fn unzip_updates(&mut self) -> DynResult<&mut Self>;
+    fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
+    fn unzip_updates(&mut self) -> ResultManagerErr<&mut Self>;
     fn save_config(&mut self) -> DynResult<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
     fn self_update(&mut self) -> DynResult<&mut Self>;
@@ -84,21 +101,10 @@ impl REvilManager {
         config_provider: Box<dyn ConfigProvider>,
         local_provider: Box<dyn LocalFiles>,
         steam_menago: Box<dyn SteamThings>,
-        github_constr: fn(&str, &str, &str) -> REFRGithub,
+        github_constr: fn(&str, &str) -> REFRGithub,
     ) -> Self {
         Self {
-            config: REvilConfig {
-                main: Main {
-                    sources: None,
-                    autoupdate: None,
-                    steamExePath: None,
-                    steamGamesIdToSearchFor: None,
-                    errorLevel: None,
-                    repo_owner: None,
-                    chosen_source: None,
-                },
-                games: HashMap::new(),
-            },
+            config: REvilConfig::default(),
             skip_next: false,
             config_provider,
             steam_menago,
@@ -106,6 +112,8 @@ impl REvilManager {
             refr_ctor: github_constr,
             github_release_manager: None,
             games_that_require_update: [].to_vec(),
+            selected_assets: Vec::new(),
+            // selected_assets: Rc::new(Vec::new()),
         }
     }
 }
@@ -218,8 +226,7 @@ impl REvilThings for REvilManager {
             Some(it) => it.to_string(),
             None => NIGHTLY_RELEASE.to_string(),
         };
-        // TODO remove third param
-        self.github_release_manager = Some(Box::new((self.refr_ctor)(&repo_owner, &source, "c")));
+        self.github_release_manager = Some(Box::new((self.refr_ctor)(&repo_owner, &source)));
 
         info!("Checking if new release exists");
         let manager = self.github_release_manager.as_mut().unwrap();
@@ -252,40 +259,53 @@ impl REvilThings for REvilManager {
     }
 
     fn ask_for_decision(&mut self) -> &mut Self {
-        let mut selections = ["Update all games".to_owned()].to_vec();
-        let mut games = [].to_vec();
+        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like 
+        // MHRISE DMC5 then it should not change thus should not display specific message later
+        let mut different_found = false;
+        let mut games: HashMap<String, (&ReleaseAsset, bool)> = HashMap::new(); 
         let rel_manager = self.github_release_manager.as_ref();
         if rel_manager.is_some() {
             let rel_manager = rel_manager.unwrap();
             let report = rel_manager.getAssetsReport();
-            report.iter().for_each(|(short_name, asset)| {
+            report.iter().for_each(|(short_name, assets)| {
                 if self.games_that_require_update.contains(short_name) {
-                    asset.iter().for_each(|asset| {
+                    assets.iter().for_each(|asset| {
                         let mut text;
+                        let mut include_for_all_option = true;
                         if GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
                             let nextgen = self.config.games.get(short_name).unwrap().nextgen;                    
                             let tdb = create_TDB_string(short_name);
                             if asset.name.contains(&tdb) {
                                 text = format!("{} Standard version", short_name);
                                 if nextgen.is_some() && nextgen.unwrap() {
-                                    text = format!("{}      (your current version of mod is nextgen -> it will switch to standard)", text)
+                                    different_found = true;
+                                    include_for_all_option = false;
+                                    text = format!("{}      {}(your current version of mod is nextgen -> it will switch to standard)", text, SORT_DETERMINER)
                                 };
                             } else {
                                 text = format!("{} Nextgen version", short_name);
                                 if nextgen.is_some() && !nextgen.unwrap() {
-                                    text = format!("{}      (your current version of mod is standard -> it will switch to nextgen)", text)
+                                    different_found = true;
+                                    include_for_all_option = false;
+                                    text = format!("{}      {}(your current version of mod is standard -> it will switch to nextgen)", text, SORT_DETERMINER)
                                 };
                             }
                         } else {
                             text = short_name.to_string();
                         }
-                        games.push(text);
+                        games.insert(text, (asset, include_for_all_option));
                     });
                 }
             })
         }
-        games.push("TEST".to_string());
-        selections = [selections, games].concat();
+        let mut selections = ["Update all games".to_owned()].to_vec();
+        if different_found {
+            selections[0] = format!("{} - (will choose base of your current local mod settings per game)", selections[0])
+        }
+
+        let mut texts: Vec<String> = games.keys().cloned().collect();
+        texts.sort_by(|a,b|REvilManager::sort(&a,&b));
+        selections.extend(texts);
         debug!("{:#?}", selections);
 
         let count = self.games_that_require_update.len();
@@ -295,16 +315,36 @@ impl REvilThings for REvilManager {
             .items(&selections[..])
             .interact()
             .unwrap();
-        // TODO here below might be a problem with unwrap but maybe not so far is good! Do not change to above 1
-        info!("Enjoy your {}!", selections[selection].split("  ").collect::<Vec<&str>>().first().unwrap());
+        
+        if selection == 0 {
+            games.values().for_each(|(asset, include)| {
+                if *include { 
+                    self.selected_assets.push(asset.clone().clone());
+                }
+            });
+            return self;
+        }
+        if let Some((asset, _)) = games.get(&selections[selection]) {
+            self.selected_assets.push(asset.clone().clone());
+        };
         self
     }
 
-    fn download_REFramework_update(&mut self) -> &mut Self {
-        todo!()
+    fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self> {
+        self.selected_assets.iter().try_for_each(|asset| -> ResultManagerErr<()> {
+            self.github_release_manager
+            .as_ref()
+            .unwrap()
+            .download_release_asset(asset)
+            .or_else(|err| 
+                Err(Report::new(REvilManagerError))
+                .attach_printable(format!("Error during downloading asset {} Error {:?}", asset.name, err)))?;
+            Ok(())
+        })?;
+        Ok(self)
     }
 
-    fn unzip_updates(&mut self) -> DynResult<&mut Self> {
+    fn unzip_updates(&mut self) -> ResultManagerErr<&mut Self> {
         todo!()
     }
 
@@ -358,3 +398,8 @@ impl REvilThings for REvilManager {
         }
     }
 }
+
+// #[test]
+// fn sort_test {
+    // REvilManager::so
+// }

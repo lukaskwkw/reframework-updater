@@ -9,7 +9,7 @@ use std::{
 };
 
 use error_stack::{bail, IntoReport, Report, ResultExt};
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use reqwest::header;
 use self_update::{
     backends::github::{self, ReleaseListBuilder},
@@ -27,7 +27,6 @@ type GameShortName = String;
 pub struct REFRGithub {
     repo_name: String,
     repo_owner: String,
-    filter_target: String,
     pub release: Option<Release>,
     pub report: HashMap<GameShortName, Vec<ReleaseAsset>>,
 }
@@ -43,7 +42,7 @@ impl Display for REFRGithubError {
 
 impl Error for REFRGithubError {}
 
-// type DynResult<T> = Result<T, REFRGithubError>;
+type REFResultErr<T> = Result<T, REFRGithubError>;
 
 pub trait ManageGithub<T = REFRGithub> {
     fn get_reframework_latest_release(&mut self) -> DynResult<()>;
@@ -93,16 +92,39 @@ impl ManageGithub for REFRGithub {
     }
 
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&Self> {
-        // self.release.assets
         let mut download = Download::from_url(&release_asset.download_url);
         let mut headers = header::HeaderMap::new();
         headers.insert(header::ACCEPT, "application/octet-stream".parse().unwrap());
         download.set_headers(headers);
 
         download.show_progress(true);
+        let version = &match self.release.as_ref() {
+            Some(it) => it,
+            None => return Ok(self),
+        }
+        .name;
 
-        // TODO path should be like ./releases/v1.202-0121f55/<name> let path = Path::new(release_asset.)
-        let mut tmp_archive = fs::File::create(&release_asset.name)?;
+        let path = format!("refr_cache/{}", version);
+        let path = Path::new(&path);
+        let folders = Path::new(path);
+        fs::create_dir_all(&folders).or_else(|err| {
+            Err(format!(
+                "Error during create_dir_all path {} Err {}",
+                folders.display(),
+                err
+            ))
+        })?;
+
+        let path = &folders.join(&release_asset.name);
+        info!("Downloading {} to {}", release_asset.name, path.display());
+        let mut tmp_archive = fs::File::create(&path).or_else(|err| {
+            Err(format!(
+                "Error during File::create. path {} Err {}",
+                path.display(),
+                err
+            ))
+        })?;
+
         download.download_to(&mut tmp_archive)?;
         Ok(self)
     }
@@ -126,11 +148,10 @@ impl ManageGithub for REFRGithub {
 }
 
 impl REFRGithub {
-    pub fn new(repo_owner: &str, repo_name: &str, filter_target: &str) -> Self {
+    pub fn new(repo_owner: &str, repo_name: &str) -> Self {
         REFRGithub {
             repo_owner: repo_owner.to_owned(),
             repo_name: repo_name.to_owned(),
-            filter_target: filter_target.to_owned(),
             release: None,
             report: HashMap::new(),
         }

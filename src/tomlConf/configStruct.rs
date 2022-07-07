@@ -61,7 +61,7 @@ pub struct GameConfig {
     pub runArgs: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct Main {
     pub sources: Option<Vec<String>>,
     pub repo_owner: Option<String>,
@@ -75,7 +75,7 @@ pub struct Main {
 
 pub type ShortGameName = String;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct REvilConfig {
     pub main: Main,
     pub games: HashMap<ShortGameName, GameConfig>,
