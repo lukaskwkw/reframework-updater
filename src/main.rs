@@ -57,8 +57,13 @@ static GAMES: [(&str, &str); 6] = [
     ("418370", "RE7"),
     ("1196590", "RE8"),
 ];
+static GAMES_NEXTGEN_SUPPORT: [&str; 3] = ["RE2", "RE3", "RE7"];
 
 static mut ARGS: Option<ArgsClap> = None;
+
+pub fn create_TDB_string(game_short_name: &str) -> String {
+    format!("{}_TDB", game_short_name)
+}
 
 // #[tokio::main]
 fn main() -> Result<(), Box<dyn error::Error>> {

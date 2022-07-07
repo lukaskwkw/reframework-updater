@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::tomlConf::configStruct::Runtime;
+use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, create_TDB_string};
 use error_stack::{IntoReport, Report, Result, ResultExt};
 use log::{debug, warn};
 
@@ -48,11 +48,10 @@ impl LocalFiles for LocalProvider {
 }
 
 fn map_to_nextgen(path: impl AsRef<Path>, game_short_name: &str) -> Option<bool> {
-    let games_to_lookup: [&str; 3] = ["RE2", "RE3", "RE7"];
     let dinput8_path = path.as_ref().join::<String>("dinput8.dll".to_string());
 
-    if games_to_lookup.contains(&game_short_name) {
-        let text = format!("{}_TDB", game_short_name);
+    if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
+        let text = create_TDB_string(game_short_name);
         let is_standard_edition = match find_string_in_binary_file(&dinput8_path, &text) {
             Ok(it) => it,
             Err(err) => {

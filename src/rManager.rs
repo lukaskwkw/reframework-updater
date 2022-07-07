@@ -1,8 +1,9 @@
 #![feature(explicit_generic_args_with_impl_trait)]
 
-use std::{collections::HashMap, error::Error, fmt};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering};
 
 use crate::{
+    create_TDB_string,
     refr_github::{ManageGithub, REFRGithub},
     steam::SteamThings,
     tomlConf::{
@@ -15,8 +16,9 @@ use crate::{
         progress_style,
         version_parser::isRepoVersionNewer,
     },
-    DynResult, GAMES, NIGHTLY_RELEASE, REPO_OWNER, ARGS,
+    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER,
 };
+use dialoguer::{theme::ColorfulTheme, Select};
 use env_logger::Env;
 use error_stack::{Report, Result, ResultExt};
 use log::{debug, info, log, trace, warn, Level};
@@ -53,7 +55,18 @@ type ResultManagerErr<T> = Result<T, REvilManagerError>;
 
 pub trait REvilThings {
     fn load_config(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn attach_logger(&mut self) -> ResultManagerErr<&mut Self>;
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self>;
+    fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn get_local_settings_per_game(&mut self) -> &mut Self;
+    fn check_for_REFramework_update(&mut self) -> &mut Self;
+    fn ask_for_decision(&mut self) -> &mut Self;
+    fn download_REFramework_update(&mut self) -> &mut Self;
+    fn unzip_updates(&mut self) -> DynResult<&mut Self>;
+    fn save_config(&mut self) -> DynResult<&mut Self>;
+    fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
+    fn self_update(&mut self) -> DynResult<&mut Self>;
+    fn launch_game(&mut self) -> DynResult<&mut Self>;
     fn bind(
         &mut self,
         cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
@@ -64,16 +77,6 @@ pub trait REvilThings {
         cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
         log_level: Level,
     ) -> &mut Self;
-    fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
-    fn get_local_settings_per_game(&mut self) -> &mut Self;
-    fn attach_logger(&mut self) -> ResultManagerErr<&mut Self>;
-    fn save_config(&mut self) -> DynResult<&mut Self>;
-    fn check_for_REFramework_update(&mut self) -> &mut Self;
-    fn download_REFramework_update(&mut self) -> &mut Self;
-    fn unzip_updates(&mut self) -> DynResult<&mut Self>;
-    fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
-    fn self_update(&mut self) -> DynResult<&mut Self>;
-    fn launch_game(&mut self) -> DynResult<&mut Self>;
 }
 
 impl REvilManager {
@@ -123,6 +126,24 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
+    fn attach_logger(&mut self) -> Result<&mut Self, REvilManagerError> {
+        let level;
+        unsafe {
+            level = &ARGS.as_ref().unwrap().level;
+        }
+        init_logger(
+            self.config
+                .main
+                .errorLevel
+                .as_ref()
+                .unwrap_or(level)
+                .to_string()
+                .as_ref(),
+        );
+
+        Ok(self)
+    }
+
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self> {
         info!("Going to auto-detect games");
         let game_ids = GAMES.map(|(k, v)| k);
@@ -151,40 +172,6 @@ impl REvilThings for REvilManager {
         });
 
         Ok(self)
-    }
-
-    fn bind(
-        &mut self,
-        cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
-        log_level: Level,
-    ) -> &mut Self {
-        if self.skip_next {
-            return self;
-        }
-        match cb(self) {
-            Ok(it) => return self,
-            Err(err) => {
-                self.skip_next = true;
-                log!(log_level, "{}", err);
-                debug!("Error {:?}", err);
-                return self;
-            }
-        }
-    }
-
-    fn or_log_err(
-        &mut self,
-        cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
-        log_level: Level,
-    ) -> &mut Self {
-        match cb(self) {
-            Ok(it) => return self,
-            Err(err) => {
-                log!(log_level, "{}", err);
-                debug!("Error {:?}", err);
-                return self;
-            }
-        }
     }
 
     fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError> {
@@ -219,28 +206,6 @@ impl REvilThings for REvilManager {
 
         trace!("Full config: \n {:#?}", self.config);
         self
-    }
-
-    fn attach_logger(&mut self) -> Result<&mut Self, REvilManagerError> {
-        let level;
-        unsafe {
-            level = &ARGS.as_ref().unwrap().level;
-        }
-        init_logger(
-            self.config
-                .main
-                .errorLevel
-                .as_ref()
-                .unwrap_or(level)
-                .to_string()
-                .as_ref(),
-        );
-
-        Ok(self)
-    }
-
-    fn save_config(&mut self) -> DynResult<&mut Self> {
-        todo!()
     }
 
     fn check_for_REFramework_update(&mut self) -> &mut Self {
@@ -286,11 +251,64 @@ impl REvilThings for REvilManager {
         self
     }
 
+    fn ask_for_decision(&mut self) -> &mut Self {
+        let mut selections = ["Update all games".to_owned()].to_vec();
+        let mut games = [].to_vec();
+        let rel_manager = self.github_release_manager.as_ref();
+        if rel_manager.is_some() {
+            let rel_manager = rel_manager.unwrap();
+            let report = rel_manager.getAssetsReport();
+            report.iter().for_each(|(short_name, asset)| {
+                if self.games_that_require_update.contains(short_name) {
+                    asset.iter().for_each(|asset| {
+                        let mut text;
+                        if GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
+                            let nextgen = self.config.games.get(short_name).unwrap().nextgen;                    
+                            let tdb = create_TDB_string(short_name);
+                            if asset.name.contains(&tdb) {
+                                text = format!("{} Standard version", short_name);
+                                if nextgen.is_some() && nextgen.unwrap() {
+                                    text = format!("{}      (your current version of mod is nextgen -> it will switch to standard)", text)
+                                };
+                            } else {
+                                text = format!("{} Nextgen version", short_name);
+                                if nextgen.is_some() && !nextgen.unwrap() {
+                                    text = format!("{}      (your current version of mod is standard -> it will switch to nextgen)", text)
+                                };
+                            }
+                        } else {
+                            text = short_name.to_string();
+                        }
+                        games.push(text);
+                    });
+                }
+            })
+        }
+        games.push("TEST".to_string());
+        selections = [selections, games].concat();
+        debug!("{:#?}", selections);
+
+        let count = self.games_that_require_update.len();
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!("I found {} games that require update. Select which one you want to update or select all", count))
+            .default(0)
+            .items(&selections[..])
+            .interact()
+            .unwrap();
+        // TODO here below might be a problem with unwrap but maybe not so far is good! Do not change to above 1
+        info!("Enjoy your {}!", selections[selection].split("  ").collect::<Vec<&str>>().first().unwrap());
+        self
+    }
+
     fn download_REFramework_update(&mut self) -> &mut Self {
         todo!()
     }
 
     fn unzip_updates(&mut self) -> DynResult<&mut Self> {
+        todo!()
+    }
+
+    fn save_config(&mut self) -> DynResult<&mut Self> {
         todo!()
     }
 
@@ -304,5 +322,39 @@ impl REvilThings for REvilManager {
 
     fn launch_game(&mut self) -> DynResult<&mut Self> {
         todo!()
+    }
+
+    fn bind(
+        &mut self,
+        cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
+        log_level: Level,
+    ) -> &mut Self {
+        if self.skip_next {
+            return self;
+        }
+        match cb(self) {
+            Ok(it) => return self,
+            Err(err) => {
+                self.skip_next = true;
+                log!(log_level, "{}", err);
+                debug!("Error {:?}", err);
+                return self;
+            }
+        }
+    }
+
+    fn or_log_err(
+        &mut self,
+        cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
+        log_level: Level,
+    ) -> &mut Self {
+        match cb(self) {
+            Ok(it) => return self,
+            Err(err) => {
+                log!(log_level, "{}", err);
+                debug!("Error {:?}", err);
+                return self;
+            }
+        }
     }
 }
