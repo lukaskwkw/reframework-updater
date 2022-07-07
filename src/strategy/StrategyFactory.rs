@@ -27,7 +27,9 @@ impl StrategyFactory {
         Self {}
     }
     pub fn get_strategy(manager: &mut REvilManager) -> impl Fn(&mut REvilManager) -> () {
-        parse_args();
+        unsafe {
+            parse_args();
+        }
         BindStrategy::run
     }
 }
