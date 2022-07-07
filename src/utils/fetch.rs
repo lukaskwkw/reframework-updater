@@ -37,7 +37,7 @@ fn getFileNameFromUrl(url: &str) -> Result<String, Box<dyn Error>> {
     Ok(fname.to_owned())
 }
 
-pub fn fetch_release(github_api_url: &str) -> DynResult<Release> {
+pub fn fetch_release_api(github_api_url: &str) -> DynResult<Release> {
     let mut headers = header::HeaderMap::new();
     headers.insert(
         header::USER_AGENT,

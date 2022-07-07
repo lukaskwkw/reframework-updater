@@ -2,12 +2,14 @@ use core::fmt;
 use std::{
     collections::HashMap,
     error::Error,
-    fmt::{Display, Formatter},
-    fs, path::Path,
+    fmt::{format, Display, Formatter},
+    fs,
+    ops::ControlFlow,
+    path::Path,
 };
 
 use error_stack::{bail, IntoReport, Report, ResultExt};
-use log::{debug, error};
+use log::{debug, error, trace};
 use reqwest::header;
 use self_update::{
     backends::github::{self, ReleaseListBuilder},
@@ -15,9 +17,11 @@ use self_update::{
     Download,
 };
 
-use crate::{DynResult, utils::fetch::fetch_release};
+use crate::{utils::fetch::fetch_release_api, DynResult, GAMES_NEXTGEN_SUPPORT};
 
 use super::release::ReleaseREFR;
+
+type GameShortName = String;
 
 #[derive(Clone, Debug, Default)]
 pub struct REFRGithub {
@@ -25,6 +29,7 @@ pub struct REFRGithub {
     repo_owner: String,
     filter_target: String,
     pub release: Option<Release>,
+    pub report: HashMap<GameShortName, Vec<ReleaseAsset>>,
 }
 
 #[derive(Debug)]
@@ -42,18 +47,49 @@ impl Error for REFRGithubError {}
 
 pub trait ManageGithub<T = REFRGithub> {
     fn get_reframework_latest_release(&mut self) -> DynResult<()>;
+    fn generate_assets_report(&mut self) -> DynResult<()>;
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&T>;
     fn fetch_release(&self) -> DynResult<Release>;
     // fn filter_ou(&self) -> DynResult<Release>;
     fn getRelease(&self) -> Option<&Release>;
+    fn getAssetsReport(&self) -> &HashMap<GameShortName, Vec<ReleaseAsset>>;
 }
 
 impl ManageGithub for REFRGithub {
     fn get_reframework_latest_release(&mut self) -> DynResult<()> {
         let release = self.fetch_release()?;
-        debug!("Release {:?}", release);
+        trace!("{:?}", release);
         self.release = Some(release);
+        self.generate_assets_report()?;
+        trace!("Assets Report: {:#?}", self.report);
         return Ok(());
+    }
+
+    fn generate_assets_report(&mut self) -> DynResult<()> {
+        let assets = &self.release.as_ref().ok_or("Release not found")?.assets;
+        assets.iter().try_for_each(|asset| -> DynResult<()> {
+            let game_short_name = GAMES_NEXTGEN_SUPPORT
+                .iter()
+                .find(|short_name| asset.name.contains(*short_name));
+            if let Some(it) = game_short_name {
+                self.report
+                    .entry(it.to_string())
+                    .and_modify(|assets| assets.push(asset.clone()))
+                    .or_insert([asset.clone()].to_vec());
+                ()
+            } else {
+                let short_name = asset.name.split('.').collect::<Vec<&str>>();
+                let short_name = short_name.first().ok_or(format!(
+                    "asset name doesn't follow <%s>.<%s> format i.e. should be RE7.zip found [{}]",
+                    asset.name
+                ))?;
+
+                self.report
+                    .insert(short_name.to_string(), [asset.clone()].to_vec());
+            }
+            Ok(())
+        })?;
+        Ok(())
     }
 
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&Self> {
@@ -76,7 +112,7 @@ impl ManageGithub for REFRGithub {
             "{}/repos/{}/{}/releases",
             "https://api.github.com", self.repo_owner, self.repo_name
         );
-        let release = fetch_release(&api_url)?;
+        let release = fetch_release_api(&api_url)?;
         return Ok(release);
     }
 
@@ -84,21 +120,9 @@ impl ManageGithub for REFRGithub {
         self.release.as_ref()
     }
 
-    // pub fn set_filtered_assets_as_values(
-    //     &self,
-    //     games
-    //     // games_hash: &mut HashMap<String, String>,
-    //     should_contain: &bool,
-    // ) -> DynResult<()> {
-    //     let
-    //     for game in games_hash  {
-    //         game.
-    //     }
-
-    //         .for
-    //         .filter(|asset| asset.download_url.contains(self.filter_target) == should_contain);
-    //         ()
-    // }
+    fn getAssetsReport(&self) -> &HashMap<std::string::String, Vec<ReleaseAsset>> {
+        &self.report
+    }
 }
 
 impl REFRGithub {
@@ -108,6 +132,7 @@ impl REFRGithub {
             repo_name: repo_name.to_owned(),
             filter_target: filter_target.to_owned(),
             release: None,
+            report: HashMap::new(),
         }
     }
 }
