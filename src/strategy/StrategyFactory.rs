@@ -72,8 +72,8 @@ impl Strategy for BindStrategy {
                 Level::Error,
             )
             .bind(|this| Ok(this.get_local_settings_per_game()), Level::Error)
-            .bind(|this| Ok(this.check_for_REFramework_update()), Level::Error)
-            .bind(|this| Ok(this.ask_for_decision()), Level::Error)
+            .bind(|this| this.check_for_REFramework_update(), Level::Error)
+            .bind(|this| this.ask_for_decision(), Level::Error)
             .bind(|this| {
                 this.download_REFramework_update()
             }, Level::Error)
