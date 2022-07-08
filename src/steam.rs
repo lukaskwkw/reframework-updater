@@ -1,5 +1,5 @@
 use core::fmt;
-use error_stack::{IntoReport, Report, Result, ResultExt};
+use error_stack::{IntoReport, Result, ResultExt};
 use game_scanner::{manager, prelude::Game, steam};
 use std::{
     error::Error,
@@ -32,13 +32,13 @@ impl SteamThings for SteamManager {
         let game_path_vec: Vec<(String, PathBuf)> = games
             .iter()
             .filter_map(
-                |game| match game_ids.iter().any(|id| id.to_owned() == game.id) {
+                |game| match game_ids.iter().any(|id| *id == game.id) {
                     true => Some((game.id.clone(), game.path.to_owned()?)),
                     false => None,
                 },
             )
             .collect();
-        return Ok(game_path_vec);
+        Ok(game_path_vec)
     }
 
     fn run_game(&self, game: &Game) -> SteamResult<()> {

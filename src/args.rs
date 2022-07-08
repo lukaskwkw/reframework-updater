@@ -1,5 +1,5 @@
 use clap::Parser;
-use env_logger::Env;
+
 
 use crate::{tomlConf::configStruct::ErrorLevel, ARGS};
 
@@ -9,7 +9,7 @@ pub fn convert_args_to_config() {
         println!("Argument {}", argument);
     }
     if args.len() > 2 && args[1] == "-run" {
-        print!("About to run {} are you happy now?!:) \n", args[2]);
+        println!("About to run {} are you happy now?!:) ", args[2]);
     }
 }
 /// Updater for reframework mod games

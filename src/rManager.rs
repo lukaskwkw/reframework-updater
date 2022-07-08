@@ -1,6 +1,4 @@
-#![feature(explicit_generic_args_with_impl_trait)]
-
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, ops::RangeBounds, rc::Rc, any};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering};
 
 use crate::{
     create_TDB_string,
@@ -8,10 +6,10 @@ use crate::{
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime, ShortGameName},
+        configStruct::{ErrorLevel, GameConfig, REvilConfig, Runtime},
     },
     utils::{
-        init_logger::{self, init_logger},
+        init_logger::{init_logger},
         local_version::LocalFiles,
         progress_style,
         version_parser::isRepoVersionNewer,
@@ -19,9 +17,9 @@ use crate::{
     DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER,
 };
 use dialoguer::{theme::ColorfulTheme, Select};
-use env_logger::Env;
+
 use error_stack::{Report, Result, ResultExt};
-use log::{debug, info, log, trace, warn, Level};
+use log::{debug, info, log, trace, Level};
 use self_update::update::ReleaseAsset;
 use std::time::Duration;
 
@@ -138,7 +136,7 @@ impl REvilThings for REvilManager {
             .or_else(|err| {
                 self.attach_logger()?;
                 self.config.main.errorLevel = Some(ErrorLevel::info);
-                return Err(err);
+                Err(err)
             })?;
         self.config = config;
         self.attach_logger()?;
@@ -165,7 +163,7 @@ impl REvilThings for REvilManager {
 
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self> {
         info!("Going to auto-detect games");
-        let game_ids = GAMES.map(|(k, v)| k);
+        let game_ids = GAMES.map(|(k, _v)| k);
         let games_tuple_arr = self
             .steam_menago
             .get_games_locations(&game_ids.to_vec())
@@ -208,7 +206,7 @@ impl REvilThings for REvilManager {
             pb.tick();
             let local_config = self
                 .local_provider
-                .get_local_report_for_game(&game_location, short_name);
+                .get_local_report_for_game(game_location, short_name);
             config.runtime = local_config.runtime;
             if local_config.version.is_some() {
                 config.versions = Some([local_config.version.unwrap()].to_vec());
@@ -255,7 +253,7 @@ impl REvilThings for REvilManager {
                 );
 
                 let is_rnewer =
-                    isRepoVersionNewer(&latest_local_version, &latest_github_version);
+                    isRepoVersionNewer(latest_local_version, latest_github_version);
                 if is_rnewer.is_some() && is_rnewer.unwrap() {
                     self.games_that_require_update.push(short_name.to_string());
                 };
@@ -328,7 +326,7 @@ impl REvilThings for REvilManager {
         }
 
         let mut texts: Vec<String> = games.keys().cloned().collect();
-        texts.sort_by(|a,b|REvilManager::sort(&a,&b));
+        texts.sort_by(|a,b|REvilManager::sort(a,b));
         selections.extend(texts);
         debug!("{:#?}", selections);
 
@@ -360,7 +358,7 @@ impl REvilThings for REvilManager {
                 }
                 if include.is_none() && different_found && any_none && selection == 1 && asset.name.contains(STANDARD_TYPE_QUALIFIER) {
                     debug!("adding standard asset for {}", asset.name);
-                    return self.selected_assets.push(asset.clone().clone());
+                    self.selected_assets.push(asset.clone().clone())
                 }
             });
                 return Ok(self);
@@ -415,12 +413,12 @@ impl REvilThings for REvilManager {
             return self;
         }
         match cb(self) {
-            Ok(it) => return self,
+            Ok(_it) => self,
             Err(err) => {
                 self.skip_next = true;
                 log!(log_level, "{}", err);
                 debug!("Error {:?}", err);
-                return self;
+                self
             }
         }
     }
@@ -431,11 +429,11 @@ impl REvilThings for REvilManager {
         log_level: Level,
     ) -> &mut Self {
         match cb(self) {
-            Ok(it) => return self,
+            Ok(_it) => self,
             Err(err) => {
                 log!(log_level, "{}", err);
                 debug!("Error {:?}", err);
-                return self;
+                self
             }
         }
     }

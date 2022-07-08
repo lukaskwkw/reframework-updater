@@ -10,8 +10,7 @@ pub fn init_logger(error_level: &str) {
     match env_logger::Builder::from_env(env).try_init() {
         Ok(it) => it,
         Err(err) => {
-            debug!("Logger already initialized {}", err);
-            return ();
+            debug!("Logger already initialized {}", err);            
         }
     };
 }
