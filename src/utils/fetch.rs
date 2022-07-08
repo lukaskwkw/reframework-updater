@@ -2,17 +2,13 @@ use std::io::{Cursor};
 use std::{
     error::Error,
 };
-
-use error_stack::{bail, IntoReport, Report, ResultExt};
-use log::{debug, error};
+use log::{error};
 use reqwest::header;
 use self_update::{
     update::{Release}
 };
-
 use crate::DynResult;
 use crate::reframework_github::release::ReleaseREFR;
-
 use reqwest::Url;
 
 pub async fn fetch_file(url: &str, file_name: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -61,7 +57,7 @@ pub fn fetch_release_api(github_api_url: &str) -> DynResult<Release> {
     let releases = resp.json::<serde_json::Value>()?;
     let releases = releases
         .as_array()
-        .ok_or_else(|| format!("No releases found"))?;
+        .ok_or_else(|| "No releases found".to_string())?;
     let releases = releases
         .iter()
         .take(1)
@@ -69,6 +65,6 @@ pub fn fetch_release_api(github_api_url: &str) -> DynResult<Release> {
         .collect::<DynResult<Vec<Release>>>()?;
     let release = releases
         .first()
-        .ok_or_else(|| format!("No release found"))?;
-    return Ok(release.clone());
+        .ok_or_else(|| "No release found".to_string())?;
+    Ok(release.clone())
 }

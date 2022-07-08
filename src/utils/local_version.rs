@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, create_TDB_string};
-use error_stack::{IntoReport, Report, Result, ResultExt};
+use error_stack::{IntoReport, Result, ResultExt};
 use log::{debug, warn};
 
 use super::binSearch::find_string_in_binary_file;
@@ -39,16 +39,16 @@ type LocalResult<T> = Result<T, LocalError>;
 
 impl LocalFiles for LocalProvider {
     fn get_local_report_for_game(&self, game_path: &str, game_short_name: &str) -> LocalGameConfig {
-        return LocalGameConfig {
+        LocalGameConfig {
             runtime: map_to_runtime(game_path),
             version: map_to_version(game_path),
             nextgen: map_to_nextgen(game_path, game_short_name),
-        };
+        }
     }
 }
 
 fn map_to_nextgen(path: impl AsRef<Path>, game_short_name: &str) -> Option<bool> {
-    let dinput8_path = path.as_ref().join("dinput8.dll".to_string());
+    let dinput8_path = path.as_ref().join("dinput8.dll");
 
     if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
         let text = create_TDB_string(game_short_name);
@@ -108,5 +108,5 @@ fn map_to_version(path: impl AsRef<Path>) -> Option<String> {
         );
         return None;
     }
-    return Some(version[..7].to_string());
+    Some(version[..7].to_string())
 }

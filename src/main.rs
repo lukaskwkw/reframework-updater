@@ -1,10 +1,10 @@
 use args::ArgsClap;
-use clap::Parser;
+
 #[cfg(target_os = "windows")]
 use rManager::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
-use core::time;
-use std::{error::{self, Error}, thread};
+
+use std::{error::{self, Error}};
 use steam::SteamManager;
 use strategy::StrategyFactory::StrategyFactory;
 use tomlConf::config::REvilConfigProvider;
@@ -29,9 +29,9 @@ pub mod unzip {
     pub mod UnzipError;
     pub mod unzip;
 }
-mod tests {
-    pub mod data;
-}
+// mod tests {
+//     pub mod data;
+// }
 pub mod strategy {
     pub mod StrategyFactory;
 }

@@ -1,19 +1,14 @@
-use core::time;
-use std::{process, thread};
-
-use clap::Parser;
 use error_stack::ResultExt;
-use log::{error, info, warn, Level};
-
+use log::{Level};
 use crate::{
-    args::{parse_args, ArgsClap},
+    args::{parse_args},
     rManager::{REvilManager, REvilThings},
 };
 
 pub struct StrategyFactory;
 
 trait Strategy {
-    fn run(manager: &mut REvilManager) -> ();
+    fn run(manager: &mut REvilManager);
 }
 
 struct ConfigFileNotFound {}
@@ -26,7 +21,7 @@ impl StrategyFactory {
     pub fn new() -> Self {
         Self {}
     }
-    pub fn get_strategy(manager: &mut REvilManager) -> impl Fn(&mut REvilManager) -> () {
+    pub fn get_strategy(_manager: &mut REvilManager) -> impl Fn(&mut REvilManager) {
         unsafe {
             parse_args();
         }
@@ -82,6 +77,6 @@ impl Strategy for BindStrategy {
             }, Level::Error)
             .save_config().unwrap();
 
-        ()
+        
     }
 }

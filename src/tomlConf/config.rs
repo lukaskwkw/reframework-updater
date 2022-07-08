@@ -1,4 +1,4 @@
-use error_stack::{Context, IntoReport, Report, Result, ResultExt};
+use error_stack::{IntoReport, Result, ResultExt};
 use std::fs::File;
 use std::io::prelude::*;
 use std::{

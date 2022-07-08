@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use error_stack::{Context, IntoReport, Report, Result, ResultExt};
+use error_stack::{IntoReport, Result, ResultExt};
 use toml::Value;
 
 use super::{
@@ -39,7 +39,7 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
         main_table,
         config_str.ok_or("Reduce error").unwrap()
     );
-    return Ok(all);
+    Ok(all)
 }
 
 pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameConfig>)> {
@@ -53,9 +53,9 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
         None => return Err(ConfigError::DeserializerError)?,
     };
 
-    let (key, main_value) = match table
+    let (_key, main_value) = match table
             .iter()
-            .find(|(s, v)| s == &"main") {
+            .find(|(s, _v)| s == &"main") {
         Some((key, main_value)) => (key, main_value),
         None => Err(ConfigError::DeserializerError).report().attach_printable("Main not found!")?,
     };
@@ -82,5 +82,5 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
         .collect::<HashMap<String, GameConfig>>();
 
     // games.iter().for_each(|game| println!("{:?}", game));
-    return Ok((main, games));
+    Ok((main, games))
 }
