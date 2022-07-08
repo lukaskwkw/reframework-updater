@@ -48,7 +48,7 @@ impl LocalFiles for LocalProvider {
 }
 
 fn map_to_nextgen(path: impl AsRef<Path>, game_short_name: &str) -> Option<bool> {
-    let dinput8_path = path.as_ref().join::<String>("dinput8.dll".to_string());
+    let dinput8_path = path.as_ref().join("dinput8.dll".to_string());
 
     if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
         let text = create_TDB_string(game_short_name);

@@ -61,8 +61,10 @@ static GAMES_NEXTGEN_SUPPORT: [&str; 3] = ["RE2", "RE3", "RE7"];
 
 static mut ARGS: Option<ArgsClap> = None;
 
+static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
+
 pub fn create_TDB_string(game_short_name: &str) -> String {
-    format!("{}_TDB", game_short_name)
+    format!("{}{}", game_short_name, STANDARD_TYPE_QUALIFIER)
 }
 
 // #[tokio::main]
