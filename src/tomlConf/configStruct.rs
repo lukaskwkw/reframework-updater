@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    fmt::{Debug}, error::Error,
-};
+use std::{collections::HashMap, error::Error, fmt::Debug};
 
 pub type ConfigResult<T> = Result<T, ConfigError>;
 
@@ -27,7 +24,8 @@ pub enum ErrorLevel {
     debug,
     warn,
     error,
-    trace
+    trace,
+    none,
 }
 
 impl std::fmt::Display for ErrorLevel {
@@ -36,7 +34,7 @@ impl std::fmt::Display for ErrorLevel {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Runtime {
     OpenVR,
     OpenXR,
@@ -57,7 +55,7 @@ impl Runtime {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GameConfig {
     pub location: Option<String>,
     pub steamId: Option<String>,
@@ -76,7 +74,6 @@ pub struct Main {
     pub steamExePath: Option<String>,
     pub steamGamesIdToSearchFor: Option<Vec<String>>,
     pub errorLevel: Option<ErrorLevel>,
-
 }
 
 pub type ShortGameName = String;

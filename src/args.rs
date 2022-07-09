@@ -1,6 +1,5 @@
 use clap::Parser;
 
-
 use crate::{tomlConf::configStruct::ErrorLevel, ARGS};
 
 pub fn convert_args_to_config() {
@@ -21,7 +20,7 @@ pub struct ArgsClap {
     pub run: String,
 
     /// Debug level please use one of following: info, debug, warn, error, trace
-    #[clap(short, long, value_enum, default_value = "info")]
+    #[clap(short, long, value_enum, default_value = "none")]
     pub level: ErrorLevel,
 }
 

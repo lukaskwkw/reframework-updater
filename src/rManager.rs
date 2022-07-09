@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process, fs};
 
 use crate::{
     create_TDB_string,
@@ -12,14 +12,14 @@ use crate::{
         init_logger::{init_logger},
         local_version::LocalFiles,
         progress_style,
-        version_parser::isRepoVersionNewer,
+        version_parser::{isRepoVersionNewer},
     },
-    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER, unzip::{unzip},
+    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER, unzip::{unzip}, reframework_github::release, MAX_ZIP_FILES_PER_GAME_CACHE,
 };
 use dialoguer::{theme::ColorfulTheme, Select};
 
-use error_stack::{Report, Result, ResultExt};
-use log::{debug, info, log, trace, Level};
+use error_stack::{Report, Result, ResultExt, IntoReport, Context};
+use log::{debug, info, log, trace, Level, warn};
 use self_update::update::ReleaseAsset;
 use std::time::Duration;
 
@@ -30,9 +30,14 @@ pub enum REvilManagerError {
     ReleaseIsEmpty,
     CheckingNewReleaseErr,
     GameNotFoundForGivenShortName(String),
+    CannotDeductShortNameFromAssetName(String),
+    RemoveZipAssetFromCacheErr(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
     UnzipError,
+    SaveConfigError,
+    ReadDirError(String),
+    LoadConfigError,
     #[default]
     Other
 }
@@ -55,6 +60,7 @@ pub struct REvilManager {
     github_release_manager: Option<Box<dyn ManageGithub>>,
     refr_ctor: fn(&str, &str) -> REFRGithub,
     selected_assets: Vec<ReleaseAsset>,
+    pub config_loading_error_ocurred: bool,
 }
 
 type ResultManagerErr<T> = Result<T, REvilManagerError>;
@@ -69,17 +75,19 @@ const SORT_DETERMINER: &str = "info";
 
 
 pub trait REvilThings {
-    fn load_config(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn load_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn attach_logger(&mut self) -> ResultManagerErr<&mut Self>;
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self>;
     fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn get_local_settings_per_game(&mut self) -> &mut Self;
+    // fn get_local_settings_per_game_if_missing_conf_file(&mut self) -> &mut Self;
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn unzip_update(&self, game_short_name: &str, file_name: &str) -> ResultManagerErr<&Self>;
     fn unzip_updates(&self) -> ResultManagerErr<&Self>;
-    fn save_config(&mut self) -> DynResult<&mut Self>;
+    fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
     fn self_update(&mut self) -> DynResult<&mut Self>;
     fn launch_game(&mut self) -> DynResult<&mut Self>;
@@ -112,7 +120,7 @@ impl REvilManager {
             github_release_manager: None,
             games_that_require_update: [].to_vec(),
             selected_assets: Vec::new(),
-            // selected_assets: Rc::new(Vec::new()),
+            config_loading_error_ocurred: false,
         }
     }
 
@@ -145,12 +153,13 @@ impl REvilManager {
 }
 
 impl REvilThings for REvilManager {
-    fn load_config(&mut self) -> Result<&mut Self, REvilManagerError> {
+    fn load_config(&mut self) -> ResultManagerErr<&mut Self> {
         let config = self
             .config_provider
             .load_from_file()
-            .change_context(REvilManagerError::default())
+            .change_context(REvilManagerError::LoadConfigError)
             .or_else(|err| {
+                self.config_loading_error_ocurred = true;
                 self.attach_logger()?;
                 self.config.main.errorLevel = Some(ErrorLevel::info);
                 Err(err)
@@ -161,19 +170,20 @@ impl REvilThings for REvilManager {
     }
 
     fn attach_logger(&mut self) -> Result<&mut Self, REvilManagerError> {
-        let level;
+        let mut level;
         unsafe {
             level = &ARGS.as_ref().unwrap().level;
         }
-        init_logger(
-            self.config
-                .main
-                .errorLevel
-                .as_ref()
-                .unwrap_or(level)
-                .to_string()
-                .as_ref(),
-        );
+        if level == &ErrorLevel::none {
+            level = self.config
+            .main
+            .errorLevel
+            .as_ref()
+            .unwrap_or(&ErrorLevel::info);
+        }
+        println!("Level {}", level);
+
+        init_logger(level.to_string().as_ref());
 
         Ok(self)
     }
@@ -187,22 +197,29 @@ impl REvilThings for REvilManager {
             .change_context(REvilManagerError::default())?;
 
         games_tuple_arr.iter().for_each(|(id, path)| {
-            // unwrap here is ok as we don't expect different game as GAMES where passed to get_games_locations earlier too
+            // unwrap call here is ok as we don't expect different game as GAMES where passed to get_games_locations earlier too
             let (_, game_short_name) = GAMES.iter().find(|(game_id, _)| game_id == id).unwrap();
 
             info!("game detected name {}, path {:?}", game_short_name, path);
 
-            self.config.games.insert(
-                game_short_name.to_string(),
-                GameConfig {
-                    location: Some(path.display().to_string()),
-                    steamId: Some(id.to_owned()),
-                    versions: None,
-                    nextgen: Some(false),
-                    runtime: Some(Runtime::OpenVR),
-                    runArgs: None,
-                },
-            );
+            let game_config = GameConfig {
+                location: Some(path.display().to_string()),
+                steamId: Some(id.to_owned()),
+                runtime: Some(Runtime::OpenVR),
+                ..GameConfig::default()
+            };
+
+            self.config.games
+                .entry(game_short_name.to_string())
+                .and_modify(|game| {
+                    GameConfig {
+                        runtime: game.runtime.clone(),
+                        nextgen: game.nextgen.clone(),
+                        runArgs: game.runArgs.clone(),
+                        ..game_config.clone()
+                    };
+                })
+                .or_insert(game_config);
         });
 
         Ok(self)
@@ -368,7 +385,7 @@ impl REvilThings for REvilManager {
         // important do not change order of below if call as later in iteration can provide out of index error
         if selection == (selections.len() -1) {
             info!("Chosen exit option. Bye bye..");
-            process::exit(0);
+            return Ok(self);
         }
         
         debug!("selection {}, different_found {}, any_none {}", selection, different_found, any_none);
@@ -425,24 +442,121 @@ impl REvilThings for REvilManager {
     fn unzip_updates(&self) -> ResultManagerErr<&Self> {
         let selected_assets =  &self.selected_assets;
         selected_assets.iter().try_for_each(|asset| -> ResultManagerErr<()> {
-            // for TDB assets
-            if let Some((game_short_name, _)) = asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
-                self.unzip_update(game_short_name, &asset.name)?;
-                return Ok(());
-            }
-            // for any other assets including nextgen assets
-            if let Some((game_short_name, _)) = asset.name.split_once(".zip") {
-                self.unzip_update(game_short_name, &asset.name)?;
-                return Ok(());
-            }
+
+            let game_short_name = match asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
+                Some(tdb_asset) => Some(tdb_asset.0),
+                None => match asset.name.split_once(".zip") {
+                    Some(asset) => Some(asset.0),
+                    None => None,
+                },
+            };
+
+            if game_short_name.is_none() { return Err(Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()))); };
+
+            let game_short_name = game_short_name.unwrap();
+            self.unzip_update(game_short_name, &asset.name)?;
+
             Ok(())
         })?;
         
         return Ok(self);
     }
 
-    fn save_config(&mut self) -> DynResult<&mut Self> {
-        todo!()
+    fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError> {
+        let selected_assets =  &self.selected_assets;
+        let manager = self.github_release_manager.as_ref().ok_or(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
+        let release = manager.getRelease();
+        let version: &str = release.as_ref().ok_or(Report::new(REvilManagerError::ReleaseIsEmpty))?.name.as_ref();
+        selected_assets.iter().try_for_each(|asset| -> ResultManagerErr<()> {
+            info!("After unzip work for - start");
+            // for TDB assets STANDARD_TYPE_QUALIFIER is used and for rest games included nextgens ".zip"
+            let game_short_name = match asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
+                Some(tdb_asset) => Some(tdb_asset.0),
+                None => match asset.name.split_once(".zip") {
+                    Some(asset) => Some(asset.0),
+                    None => None,
+                },
+            };
+
+            if game_short_name.is_none() { return Err(Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()))); };
+
+            let game_short_name = game_short_name.unwrap();         
+            
+            let game_config = self.config.games.get_mut(game_short_name).ok_or(
+                Report::new(REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string())))?;
+
+
+            if game_config.versions.is_some() {
+                let versions = game_config.versions.as_mut().unwrap();
+                versions.insert(0, version.to_string());
+
+            } else {
+                game_config.versions = Some([version.to_string()].to_vec());
+            };
+
+            // it is ok to unwrap as in previous step we added array to that game config
+            let versions = game_config.versions.as_ref().unwrap();
+            if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
+                let last_ver = versions.last().unwrap();
+                // if local version is just a hash (not contains '.') then probably there is no backup folder for it too so don't try to delete this file
+                // TODO but this can change if considered adding support for zipping first discovered mod version and preserving it
+                if last_ver.contains('.') {
+                   let cache_dir = manager.get_local_path_to_cache(Some(last_ver)).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
+
+                    let mut second_version_of_archive : Option<String> = None;
+                    if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
+                        if asset.name.contains(STANDARD_TYPE_QUALIFIER) { second_version_of_archive = Some(format!("{}.zip", game_short_name)); } else {
+                            second_version_of_archive = Some(create_TDB_string(game_short_name));
+                        }
+                    }
+
+                    for entry in fs::read_dir(&cache_dir).report().change_context(REvilManagerError::ReadDirError(cache_dir.display().to_string()))? {
+                        let entry = entry.report().change_context(REvilManagerError::ReadDirError(format!("Entry err for {}", cache_dir.display().to_string())))?;
+                        let path = entry.path();
+                        if path.is_file() {
+                            let file_name = path.file_name().unwrap();
+                            let file_name = match file_name.to_str() {
+                                Some(it) => it,
+                                None => {
+                                    debug!("File_name to_str failed: {:?}", file_name);
+                                    "anything.txt"
+                                },
+                            };
+
+                            if file_name == &asset.name {
+                                fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
+                                debug!("File: {} Removed",  path.display().to_string());
+                            }
+                            if second_version_of_archive.is_some() && file_name.contains(second_version_of_archive.as_ref().unwrap()) {
+                                fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
+                                debug!("File: {} Removed",  path.display().to_string());
+                            }
+                        }
+                    }
+
+                    match fs::remove_dir(&cache_dir) {
+                        Ok(()) => debug!("Directory: {} Removed",  cache_dir.display().to_string()),
+                        Err(err) => debug!("Can not Remove directory: {} Err {}",  cache_dir.display().to_string(),err),
+                    };
+               };
+                let mut versions = versions.clone();
+                versions.pop();
+                game_config.versions = Some(versions);
+            }
+            debug!("{:?}", game_config.versions);
+            info!("After unzip work - done");
+            Ok(())
+        })?;
+        
+        return Ok(self);
+    }
+
+    fn save_config(&mut self) -> ResultManagerErr<&mut Self> {
+        self
+        .config_provider
+        .save_to_file(&self.config)
+        .change_context(REvilManagerError::SaveConfigError)?;
+        Ok(self)
     }
 
     fn check_for_self_update(&mut self) -> DynResult<&mut Self> {

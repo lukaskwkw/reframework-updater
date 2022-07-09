@@ -1,9 +1,9 @@
-use error_stack::ResultExt;
-use log::{Level};
 use crate::{
-    args::{parse_args},
+    args::parse_args,
     rManager::{REvilManager, REvilThings},
 };
+use error_stack::ResultExt;
+use log::{debug, info, Level};
 
 pub struct StrategyFactory;
 
@@ -48,6 +48,28 @@ impl StrategyFactory {
 //     }
 // }
 
+struct CheckAndRest;
+impl Strategy for CheckAndRest {
+    fn run(manager: &mut REvilManager) {
+        manager
+            .bind(|this| this.check_for_REFramework_update(), Level::Error)
+            .bind(|this| this.ask_for_decision(), Level::Error)
+            .bind(|this| this.download_REFramework_update(), Level::Error)
+            .bind(
+                |this| {
+                    if let Err(err) = this.unzip_updates() {
+                        return Err(err);
+                    };
+                    Ok(this)
+                },
+                Level::Error,
+            )
+            .after_unzip_work()
+            .unwrap()
+            .save_config()
+            .unwrap();
+    }
+}
 struct BindStrategy;
 impl Strategy for BindStrategy {
     fn run(manager: &mut REvilManager) {
@@ -66,18 +88,11 @@ impl Strategy for BindStrategy {
                 },
                 Level::Error,
             )
-            .bind(|this| Ok(this.get_local_settings_per_game()), Level::Error)
-            .bind(|this| this.check_for_REFramework_update(), Level::Error)
-            .bind(|this| this.ask_for_decision(), Level::Error)
-            .bind(|this| {
-                this.download_REFramework_update()
-            }, Level::Error)
-            .bind(|this| {
-                if let Err(err) =  this.unzip_updates() { return Err(err); };
-                Ok(this)
-            }, Level::Error)
-            .save_config().unwrap();
-
-        
+            .bind(|this|{
+                // only check against local files when a config failed to be loaded
+                if this.config_loading_error_ocurred { return Ok(this.get_local_settings_per_game()); }
+                return Ok(this);
+            }, Level::Error);
+        CheckAndRest::run(manager);
     }
 }

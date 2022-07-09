@@ -4,7 +4,7 @@ use args::ArgsClap;
 use rManager::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
 
-use std::{error::{self, Error}};
+use std::error::{self, Error};
 use steam::SteamManager;
 use strategy::StrategyFactory::StrategyFactory;
 use tomlConf::config::REvilConfigProvider;
@@ -17,11 +17,11 @@ pub mod reframework_github {
 mod utils {
     pub mod binSearch;
     pub mod fetch;
+    pub mod init_logger;
     pub mod local_version;
     pub mod mslink;
     pub mod progress_style;
     pub mod version_parser;
-    pub mod init_logger;
 }
 
 mod steam;
@@ -62,6 +62,8 @@ static GAMES_NEXTGEN_SUPPORT: [&str; 3] = ["RE2", "RE3", "RE7"];
 static mut ARGS: Option<ArgsClap> = None;
 
 static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
+
+static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 3;
 
 pub fn create_TDB_string(game_short_name: &str) -> String {
     format!("{}{}", game_short_name, STANDARD_TYPE_QUALIFIER)
