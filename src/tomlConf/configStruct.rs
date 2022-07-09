@@ -58,7 +58,7 @@ impl Runtime {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GameConfig {
     pub location: Option<String>,
-    pub steamId: Option<String>,
+    pub steamId: Option<SteamId>,
     pub versions: Option<Vec<String>>,
     pub nextgen: Option<bool>,
     pub runtime: Option<Runtime>,
@@ -77,6 +77,7 @@ pub struct Main {
 }
 
 pub type ShortGameName = String;
+pub type SteamId = String;
 
 #[derive(Debug, Default)]
 pub struct REvilConfig {
