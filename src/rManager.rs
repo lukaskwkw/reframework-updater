@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process};
 
 use crate::{
     create_TDB_string,
@@ -14,7 +14,7 @@ use crate::{
         progress_style,
         version_parser::isRepoVersionNewer,
     },
-    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER,
+    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER, unzip::{unzip},
 };
 use dialoguer::{theme::ColorfulTheme, Select};
 
@@ -29,7 +29,10 @@ use indicatif::ProgressBar;
 pub enum REvilManagerError {
     ReleaseIsEmpty,
     CheckingNewReleaseErr,
+    GameNotFoundForGivenShortName(String),
     ReleaseManagerIsNotInitialized,
+    GameLocationMissing,
+    UnzipError,
     #[default]
     Other
 }
@@ -74,7 +77,8 @@ pub trait REvilThings {
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
-    fn unzip_updates(&mut self) -> ResultManagerErr<&mut Self>;
+    fn unzip_update(&self, game_short_name: &str, file_name: &str) -> ResultManagerErr<&Self>;
+    fn unzip_updates(&self) -> ResultManagerErr<&Self>;
     fn save_config(&mut self) -> DynResult<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
     fn self_update(&mut self) -> DynResult<&mut Self>;
@@ -111,7 +115,20 @@ impl REvilManager {
             // selected_assets: Rc::new(Vec::new()),
         }
     }
-    
+
+    pub fn unzip(file: impl AsRef<Path>, destination: impl AsRef<Path>, runtime: &Option<Runtime>) -> ResultManagerErr<()> {
+        match runtime {
+        Some(it) => {
+            unzip::unzip([it.as_opposite_local_dll().as_ref()].to_vec(), file, destination, false).change_context(REvilManagerError::UnzipError)?
+        },
+        None => {
+            unzip::unzip([Runtime::OpenVR.as_opposite_local_dll().as_ref()].to_vec(), file, destination, false).change_context(REvilManagerError::UnzipError)? 
+
+        },
+        };
+        Ok(())
+    }
+
     pub fn sort(a: &str, b: &str) -> Ordering {
         if a.contains(&SORT_DETERMINER) && !b.contains(&SORT_DETERMINER) {
             Ordering::Greater
@@ -317,13 +334,16 @@ impl REvilThings for REvilManager {
                 });
             }
         });
-        let mut selections = ["Update all games".to_owned()].to_vec();
-        if different_found && !any_none {
-            selections[0] = format!("{} - (will choose base of your current local mod settings per game)", selections[0])
-        } else if different_found && any_none {
-            selections.push(format!("{} - prefer standard", selections[0]));
-            selections[0] = format!("{} - prefer nextgen", selections[0]);
-        }
+        let mut selections = vec![];
+         if games.len() > 0 {
+            selections.push("Update all games".to_string());
+            if different_found && !any_none {
+                selections[0] = format!("{} - (will choose base of your current local mod settings per game)", selections[0])
+            } else if different_found && any_none {
+                selections.push(format!("{} - prefer standard", selections[0]));
+                selections[0] = format!("{} - prefer nextgen", selections[0]);
+            }
+        }; 
 
         let mut texts: Vec<String> = games.keys().cloned().collect();
         texts.sort_by(|a,b|REvilManager::sort(a,b));
@@ -337,12 +357,19 @@ impl REvilThings for REvilManager {
              can support both types Nextgen/Standard don't have mod installed.
              Chose which mod type use for them. For other games program will use correct version.";
         }
+        selections.push("Exit".to_string());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text))
             .default(0)
             .items(&selections[..])
             .interact()
             .unwrap();
+
+        // important do not change order of below if call as later in iteration can provide out of index error
+        if selection == (selections.len() -1) {
+            info!("Chosen exit option. Bye bye..");
+            process::exit(0);
+        }
         
         debug!("selection {}, different_found {}, any_none {}", selection, different_found, any_none);
         
@@ -384,8 +411,34 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    fn unzip_updates(&mut self) -> ResultManagerErr<&mut Self> {
-        todo!()
+    fn unzip_update(&self, game_short_name: &str, file_name: &str) -> ResultManagerErr<&Self> {
+        let game_config = self.config.games.get(game_short_name).ok_or(
+            Report::new(REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string())))?;
+            let manager = self.github_release_manager.as_ref().ok_or(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
+            let path = manager.get_local_path_to_cache(None).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
+            let path = path.join(file_name);
+            let location = game_config.location.as_ref().ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
+            REvilManager::unzip(path, location, &game_config.runtime)?;
+        Ok(self)
+    }
+
+    fn unzip_updates(&self) -> ResultManagerErr<&Self> {
+        let selected_assets =  &self.selected_assets;
+        selected_assets.iter().try_for_each(|asset| -> ResultManagerErr<()> {
+            // for TDB assets
+            if let Some((game_short_name, _)) = asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
+                self.unzip_update(game_short_name, &asset.name)?;
+                return Ok(());
+            }
+            // for any other assets including nextgen assets
+            if let Some((game_short_name, _)) = asset.name.split_once(".zip") {
+                self.unzip_update(game_short_name, &asset.name)?;
+                return Ok(());
+            }
+            Ok(())
+        })?;
+        
+        return Ok(self);
     }
 
     fn save_config(&mut self) -> DynResult<&mut Self> {

@@ -4,7 +4,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use error_stack::{IntoReport};
@@ -30,7 +30,9 @@ pub struct REFRGithub {
 }
 
 #[derive(Debug)]
-pub struct REFRGithubError;
+pub enum REFRGithubError {
+    VersionAsNameIsNone
+}
 
 impl Display for REFRGithubError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
@@ -47,6 +49,7 @@ pub trait ManageGithub<T = REFRGithub> {
     fn generate_assets_report(&mut self) -> DynResult<()>;
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&T>;
     fn fetch_release(&self) -> DynResult<Release>;
+    fn get_local_path_to_cache(&self, version: Option<&str>) -> DynResult<PathBuf>;
     // fn filter_ou(&self) -> DynResult<Release>;
     fn getRelease(&self) -> Option<&Release>;
     fn getAssetsReport(&self) -> &HashMap<GameShortName, Vec<ReleaseAsset>>;
@@ -96,15 +99,7 @@ impl ManageGithub for REFRGithub {
         download.set_headers(headers);
 
         download.show_progress(true);
-        let version = &match self.release.as_ref() {
-            Some(it) => it,
-            None => return Ok(self),
-        }
-        .name;
-
-        let path = format!("refr_cache/{}", version);
-        let path = Path::new(&path);
-        let folders = Path::new(path);
+        let folders = self.get_local_path_to_cache(None)?;
         fs::create_dir_all(&folders).map_err(|err| format!(
                 "Error during create_dir_all path {} Err {}",
                 folders.display(),
@@ -138,6 +133,26 @@ impl ManageGithub for REFRGithub {
 
     fn getAssetsReport(&self) -> &HashMap<std::string::String, Vec<ReleaseAsset>> {
         &self.report
+    }
+
+    fn get_local_path_to_cache(&self, ver: Option<&str>) -> DynResult<PathBuf> {
+        let version: &str;
+        if ver.is_none() {
+            version = &match self.release.as_ref() {
+                Some(it) => it,
+                None => return Err(Box::new(REFRGithubError::VersionAsNameIsNone)),
+            }
+            .name;
+        } else {
+            version = ver.unwrap();
+        };
+    
+        let path = format!("refr_cache/{}", version);
+        let path = Path::new(&path);
+        let folders = Path::new(path);
+        let mut path_buff = PathBuf::new();
+        path_buff.push(folders);
+        return Ok(path_buff);
     }
 }
 
