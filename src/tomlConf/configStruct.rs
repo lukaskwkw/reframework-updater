@@ -49,6 +49,12 @@ impl Runtime {
             Runtime::OpenXR => "openxr_loader.dll".to_owned(),
         }
     }
+    pub fn as_opposite_local_dll(&self) -> String {
+        match self {
+            Runtime::OpenVR => Runtime::OpenXR.as_local_dll(),
+            Runtime::OpenXR => Runtime::OpenVR.as_local_dll(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

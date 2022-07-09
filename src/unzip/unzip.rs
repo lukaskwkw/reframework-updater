@@ -1,4 +1,11 @@
 use crate::unzip::UnzipError::UnzipError;
+use error_stack::IntoReport;
+use error_stack::Report;
+use error_stack::ResultExt;
+use error_stack::{ensure, Result};
+use log::debug;
+use log::info;
+use log::trace;
 use std::error::Error;
 use std::fs;
 use std::io;
@@ -7,52 +14,60 @@ use std::path::PathBuf;
 
 pub fn unzip(
     files_to_skip: Vec<&str>,
-    destination: Option<impl AsRef<Path>>,
+    file_to_unzip: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
     dry_run: bool,
-) -> Result<bool, Box<dyn Error>> {
-    let args: Vec<_> = std::env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} <filename>", args[0]);
-        return Ok(false);
-    }
-    let fname = std::path::Path::new(&*args[1]);
-    let file = fs::File::open(&fname)?;
+) -> Result<bool, UnzipError> {
+    info!(
+        "Unzipping files from {} to {}",
+        file_to_unzip.as_ref().display(),
+        destination.as_ref().display()
+    );
+    debug!("Files to skip {:?}", files_to_skip);
 
-    let mut archive = zip::ZipArchive::new(file)?;
+    let file = fs::File::open(&file_to_unzip)
+        .report()
+        .change_context(UnzipError::other)?;
+
+    let mut archive = zip::ZipArchive::new(file)
+        .report()
+        .change_context(UnzipError::zip_new_err)?;
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
+        let mut file = archive
+            .by_index(i)
+            .report()
+            .change_context(UnzipError::by_index_err)?;
         let outpath = match file.enclosed_name() {
             Some(path) => path.to_owned(),
             None => continue,
         };
 
-        let final_path: PathBuf = match destination.as_ref() {
-            Some(path) => path.as_ref().join(outpath),
-            None => outpath,
-        };
+        let final_path: PathBuf = destination.as_ref().join(outpath);
 
         {
             let comment = file.comment();
             if !comment.is_empty() {
-                println!("File {} comment: {}", i, comment);
+                debug!("File {} comment: {}", i, comment);
             }
         }
 
         if (*file.name()).ends_with('/') {
-            println!("File {} extracted to \"{}\"", i, final_path.display());
-            fs::create_dir_all(&final_path)?;
+            trace!("File {} extracted to \"{}\"", i, final_path.display());
+            fs::create_dir_all(&final_path)
+                .report()
+                .change_context(UnzipError::create_dir_all)?;
         } else {
             let file_name = match final_path.file_name() {
                 Some(it) => it,
-                None => return Err(Box::new(UnzipError::OutpathFileName)),
+                None => return Err(Report::new(UnzipError::OutpathFileName)),
             };
 
             if files_to_skip.iter().any(|fname| &file_name == fname) {
                 continue;
             }
 
-            println!(
+            trace!(
                 "File {} extracted to \"{}\" ({} bytes)",
                 i,
                 final_path.display(),
@@ -60,17 +75,23 @@ pub fn unzip(
             );
 
             if dry_run {
-                println!("Nothing copied - dryRun!");
+                debug!("Nothing copied - dryRun!");
                 continue;
             }
             if let Some(p) = final_path.parent() {
                 if !p.exists() {
-                    fs::create_dir_all(&p)?;
+                    fs::create_dir_all(&p)
+                        .report()
+                        .change_context(UnzipError::create_dir_all)?;
                 }
             }
 
-            let mut outfile = fs::File::create(&final_path)?;
-            io::copy(&mut file, &mut outfile)?;
+            let mut outfile = fs::File::create(&final_path)
+                .report()
+                .change_context(UnzipError::file_create)?;
+            io::copy(&mut file, &mut outfile)
+                .report()
+                .change_context(UnzipError::io_copy)?;
         }
 
         // Get and Set permissions

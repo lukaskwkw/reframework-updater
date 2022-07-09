@@ -73,7 +73,8 @@ impl Strategy for BindStrategy {
                 this.download_REFramework_update()
             }, Level::Error)
             .bind(|this| {
-                this.unzip_updates()
+                if let Err(err) =  this.unzip_updates() { return Err(err); };
+                Ok(this)
             }, Level::Error)
             .save_config().unwrap();
 
