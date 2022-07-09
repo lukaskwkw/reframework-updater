@@ -29,25 +29,6 @@ impl StrategyFactory {
     }
 }
 
-// struct AndThenStrategy;
-// impl Strategy for AndThenStrategy {
-//     fn run(manager: &mut REvilManager) {
-//         manager
-//             .or_log_err(
-//                 |this| this.load_config().attach_printable("Error loading config file."),
-//                 Level::Warn,
-//             )
-//             .load_games_from_steam()
-//             .and_then(|this| this.load_games_from_steam())
-//             .and_then(|this| Ok(this.get_local_settings_per_game()))
-//             .and_then(|this| Ok(this.check_for_REFramework_update()))
-//             .and_then(|this| Ok(this.download_REFramework_update()))
-//             .unwrap();
-
-//         ()
-//     }
-// }
-
 struct CheckAndRest;
 impl Strategy for CheckAndRest {
     fn run(manager: &mut REvilManager) {
@@ -67,6 +48,10 @@ impl Strategy for CheckAndRest {
             .after_unzip_work()
             .unwrap()
             .save_config()
+            .unwrap()
+            .ask_for_game_decision_if_needed()
+            .unwrap()
+            .launch_game()
             .unwrap();
     }
 }
@@ -90,6 +75,7 @@ impl Strategy for BindStrategy {
             )
             .bind(|this|{
                 // only check against local files when a config failed to be loaded
+                // TODO but if steam find new game then it should also launch!
                 if this.config_loading_error_ocurred { return Ok(this.get_local_settings_per_game()); }
                 return Ok(this);
             }, Level::Error);

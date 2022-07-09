@@ -4,12 +4,16 @@ use game_scanner::{manager, prelude::Game, steam};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
-    path::PathBuf,
+    path::PathBuf, default,
 };
 
 pub struct SteamManager;
-#[derive(Debug)]
-pub struct SteamError;
+#[derive(Debug, Default)]
+pub enum SteamError {
+    #[default]
+    other,
+    GameNotFoundById(String)
+}
 impl Display for SteamError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         fmt.write_str("Steam error")
@@ -23,11 +27,12 @@ impl Error for SteamError {}
 pub trait SteamThings {
     fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>>;
     fn run_game(&self, game: &Game) -> SteamResult<()>;
+    fn run_game_via_steam_manager(&self, id: &str) -> SteamResult<()>;
 }
 
 impl SteamThings for SteamManager {
     fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>> {
-        let games = steam::games().report().change_context(SteamError)?;
+        let games = steam::games().report().change_context(SteamError::default())?;
 
         let game_path_vec: Vec<(String, PathBuf)> = games
             .iter()
@@ -42,7 +47,13 @@ impl SteamThings for SteamManager {
     }
 
     fn run_game(&self, game: &Game) -> SteamResult<()> {
-        manager::launch_game(game).report().change_context(SteamError)?;
+        manager::launch_game(game).report().change_context(SteamError::default())?;
+        Ok(())
+    }
+
+    fn run_game_via_steam_manager(&self, id: &str) -> SteamResult<()> {
+        let game = steam::find(id).report().change_context(SteamError::GameNotFoundById(id.to_string()))?;
+        manager::launch_game(&game).report().change_context(SteamError::default())?;
         Ok(())
     }
 }
