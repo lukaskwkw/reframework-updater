@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process, fs, ops::Index};
+use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process, fs, ops::Index, ffi::OsStr};
 
 use crate::{
     create_TDB_string,
@@ -31,6 +31,7 @@ pub enum REvilManagerError {
     CheckingNewReleaseErr,
     GameNotFoundForGivenShortName(String),
     CannotDeductShortNameFromAssetName(String),
+    RemoveFileFiled(String),
     RemoveZipAssetFromCacheErr(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
@@ -59,6 +60,7 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::ReadDirError(info) => write!(f, "ReadDirError {}", info),
             REvilManagerError::LoadConfigError => write!(f, "LoadConfigError"),
             REvilManagerError::Other => write!(f, "Other"),
+            REvilManagerError::RemoveFileFiled(info) => write!(f, "RemoveZipAssetFromCacheErr {}", info),
         }
     }
 }
@@ -82,8 +84,6 @@ pub struct REvilManager {
 type ResultManagerErr<T> = Result<T, REvilManagerError>;
 
 const SORT_DETERMINER: &str = "info";
-
-
 
 pub trait REvilThings {
     fn load_config(&mut self) -> ResultManagerErr<&mut Self>;
@@ -140,11 +140,12 @@ impl REvilManager {
     pub fn unzip(file: impl AsRef<Path>, destination: impl AsRef<Path>, runtime: &Option<Runtime>) -> ResultManagerErr<()> {
         match runtime {
         Some(it) => {
-            unzip::unzip([it.as_opposite_local_dll().as_ref()].to_vec(), file, destination, false).change_context(REvilManagerError::UnzipError)?
+            let should_skip = |file: &OsStr| file == OsStr::new(&it.as_opposite_local_dll());
+            unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?
         },
         None => {
-            unzip::unzip([Runtime::OpenVR.as_opposite_local_dll().as_ref()].to_vec(), file, destination, false).change_context(REvilManagerError::UnzipError)? 
-
+            let should_skip = |file: &OsStr| file == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
+            unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?
         },
         };
         Ok(())
@@ -259,8 +260,8 @@ impl REvilThings for REvilManager {
                 config.versions = Some([local_config.version.unwrap()].to_vec());
             }
             config.nextgen = local_config.nextgen;
-            /* TODO this info doesnt show in console log check why or erase it
-            also seems like because of progressbar some log have no chance to show up
+            /* TODO this info doesn't show in console log check why or erase it
+            also seems like because of progress bar some log have no chance to show up
             info!(
                 "Local config for [{}], runtime [{:?}], nextgen [{:?}], version [{:?}]",
                 short_name, config.runtime, local_config.nextgen, config.versions
@@ -504,8 +505,6 @@ impl REvilThings for REvilManager {
             let game_config = self.config.games.get_mut(game_short_name).ok_or(
                 Report::new(REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string())))?;
 
-            // TODO: set NEXTGEN accordingl to an asset i.e. TDB. This is missing now 
-            // TODO also remove unnecessary file after OpenXR is ver is unzipped!
             if game_config.versions.is_some() {
                 let versions = game_config.versions.as_mut().unwrap();
                 versions.insert(0, version.to_string());
@@ -514,6 +513,23 @@ impl REvilThings for REvilManager {
                 game_config.versions = Some([version.to_string()].to_vec());
             };
 
+            // set NEXTGEN accordingly to an asset but only for the supported games
+            if let Some(is_tdb) = does_asset_is_tdb(game_short_name, asset) {
+                if is_tdb {
+                    game_config.nextgen = Some(false);
+                } else {
+                    game_config.nextgen = Some(true);
+                };
+            };
+
+            // remove second, not needed runtime file as for example when switching between different runtime versions 
+            // second file may persists therefore blocking loading OpenXR runtime from loading
+            let game_folder = Path::new(game_config.location.as_ref().unwrap());
+            let open_runtime_path = game_folder.join(game_config.runtime.as_ref().unwrap().as_opposite_local_dll());
+            if Path::new(&open_runtime_path).exists() {
+                fs::remove_file(&open_runtime_path).report().change_context(REvilManagerError::RemoveFileFiled(open_runtime_path.display().to_string()))?;
+            }
+
             // it is ok to unwrap as in previous step we added array to that game config
             let versions = game_config.versions.as_ref().unwrap();
             if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
@@ -521,46 +537,10 @@ impl REvilThings for REvilManager {
                 // if local version is just a hash (not contains '.') then probably there is no backup folder for it too so don't try to delete this file
                 // TODO but this can change if considered adding support for zipping first discovered mod version and preserving it
                 if last_ver.contains('.') {
-                   let cache_dir = manager.get_local_path_to_cache(Some(last_ver)).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
-
-                    let mut second_version_of_archive : Option<String> = None;
-                    if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
-                        if asset.name.contains(STANDARD_TYPE_QUALIFIER) { second_version_of_archive = Some(format!("{}.zip", game_short_name)); } else {
-                            second_version_of_archive = Some(create_TDB_string(game_short_name));
-                        }
-                    }
-
-                    if cache_dir.exists() {
-                        for entry in fs::read_dir(&cache_dir).report().change_context(REvilManagerError::ReadDirError(cache_dir.display().to_string()))? {
-                            let entry = entry.report().change_context(REvilManagerError::ReadDirError(format!("Entry err for {}", cache_dir.display().to_string())))?;
-                            let path = entry.path();
-                            if path.is_file() {
-                                let file_name = path.file_name().unwrap();
-                                let file_name = match file_name.to_str() {
-                                    Some(it) => it,
-                                    None => {
-                                        debug!("File_name to_str failed: {:?}", file_name);
-                                        "anything.txt"
-                                    },
-                                };
-
-                                if file_name == &asset.name {
-                                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
-                                    debug!("File: {} Removed",  path.display().to_string());
-                                }
-                                if second_version_of_archive.is_some() && file_name.contains(second_version_of_archive.as_ref().unwrap()) {
-                                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
-                                    debug!("File: {} Removed",  path.display().to_string());
-                                }
-                            }
-                        }
-
-                        match fs::remove_dir(&cache_dir) {
-                            Ok(()) => debug!("Directory: {} Removed",  cache_dir.display().to_string()),
-                            Err(err) => debug!("Can not Remove directory: {} Err {}",  cache_dir.display().to_string(),err),
-                        };
-                     }
-               };
+                    cleanup_cache(manager, last_ver, game_short_name, asset)?;
+                };
+                
+                // after cleaning up cache remove last item from versions vector
                 let mut versions = versions.clone();
                 versions.pop();
                 game_config.versions = Some(versions);
@@ -659,6 +639,60 @@ impl REvilThings for REvilManager {
             }
         }
     }
+}
+
+
+fn cleanup_cache(manager: &Box<dyn ManageGithub<REFRGithub>>, last_ver: &String, game_short_name: &str, asset: &ReleaseAsset) -> ResultManagerErr<()> {
+    let cache_dir = manager.get_local_path_to_cache(Some(last_ver)).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
+    let mut second_version_of_archive : Option<String> = None;
+    if let Some(is_tdb) = does_asset_is_tdb(game_short_name, asset) {
+        if is_tdb { second_version_of_archive = Some(format!("{}.zip", game_short_name)); } else {
+            second_version_of_archive = Some(create_TDB_string(game_short_name)); }
+    };
+
+    Ok(if cache_dir.exists() {
+        for entry in fs::read_dir(&cache_dir).report().change_context(REvilManagerError::ReadDirError(cache_dir.display().to_string()))? {
+            let entry = entry.report().change_context(REvilManagerError::ReadDirError(format!("Entry err for {}", cache_dir.display().to_string())))?;
+            let path = entry.path();
+            if path.is_file() {
+                let file_name = path.file_name().unwrap();
+                let file_name = match file_name.to_str() {
+                    Some(it) => it,
+                    None => {
+                        debug!("File_name to_str failed: {:?}", file_name);
+                        "anything.txt"
+                    },
+                };
+
+                if file_name == &asset.name {
+                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
+                    debug!("File: {} Removed",  path.display().to_string());
+                }
+                if second_version_of_archive.is_some() && file_name.contains(second_version_of_archive.as_ref().unwrap()) {
+                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
+                    debug!("File: {} Removed",  path.display().to_string());
+                }
+            }
+        }
+
+        match fs::remove_dir(&cache_dir) {
+            Ok(()) => debug!("Directory: {} Removed",  cache_dir.display().to_string()),
+            Err(err) => debug!("Can not Remove directory: {} Err {}",  cache_dir.display().to_string(),err),
+        };
+     })
+}
+
+// check if asset is TDB or not if it doesn't support nextgen version then None is returned
+fn does_asset_is_tdb(game_short_name: &str, asset: &ReleaseAsset) -> Option<bool> {
+    if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
+        if asset.name.contains(STANDARD_TYPE_QUALIFIER) { 
+            return Some(true);
+             } 
+            else {
+            return Some(false);
+        }
+    }
+    None
 }
 
 // #[test]
