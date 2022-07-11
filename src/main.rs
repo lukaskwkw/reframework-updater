@@ -4,7 +4,8 @@ use args::ArgsClap;
 use rManager::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
 
-use std::error::{self, Error};
+use core::time;
+use std::{error::{self, Error}, thread};
 use steam::SteamManager;
 use strategy::StrategyFactory::StrategyFactory;
 use tomlConf::config::REvilConfigProvider;
@@ -83,5 +84,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     let strategy = StrategyFactory::get_strategy(&mut evilManager);
     strategy(&mut evilManager);
+    // let secs = time::Duration::from_secs(20);
+    // thread::sleep(secs);
     Ok(())
 }
