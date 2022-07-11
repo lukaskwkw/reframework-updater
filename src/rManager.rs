@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt, cmp::Ordering, path::Path, process, fs, ops::Index, ffi::OsStr};
+use std::{collections::HashMap, error::Error, fmt::{self, format}, cmp::Ordering, path::Path, process, fs, ops::Index, ffi::OsStr, env};
 
 use crate::{
     create_TDB_string,
@@ -12,7 +12,7 @@ use crate::{
         init_logger::{init_logger},
         local_version::LocalFiles,
         progress_style,
-        version_parser::{isRepoVersionNewer},
+        version_parser::{isRepoVersionNewer}, mslink::create_ms_lnk,
     },
     DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, NIGHTLY_RELEASE, REPO_OWNER, STANDARD_TYPE_QUALIFIER, unzip::{unzip}, reframework_github::release, MAX_ZIP_FILES_PER_GAME_CACHE,
 };
@@ -35,6 +35,7 @@ pub enum REvilManagerError {
     RemoveFileFiled(String),
     RemoveZipAssetFromCacheErr(String),
     CacheNotFoundForGivenVersion(String),
+    FailedToCreateMsLink(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
     UnzipError,
@@ -65,6 +66,7 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::RemoveFileFiled(info) => write!(f, "RemoveFileFiled {}", info),
             REvilManagerError::GameNotFoundForGivenSteamId(info) => write!(f, "GameNotFoundForGivenSteamId {}", info),
             REvilManagerError::CacheNotFoundForGivenVersion(info) => write!(f, "CacheNotFoundForGivenVersion {}", info),
+            REvilManagerError::FailedToCreateMsLink(info) => write!(f, "FailedToCreateMsLink {}", info),
         }
     }
 }
@@ -83,6 +85,7 @@ pub struct REvilManager {
     selected_assets: Vec<ReleaseAsset>,
     selected_game_to_launch: Option<SteamId>,
     pub config_loading_error_ocurred: bool,
+    pub new_steam_game_found: bool,
 }
 
 type ResultManagerErr<T> = Result<T, REvilManagerError>;
@@ -95,8 +98,9 @@ pub trait REvilThings {
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self>;
     fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn get_local_settings_per_game(&mut self) -> &mut Self;
-    // fn get_local_settings_per_game_if_missing_conf_file(&mut self) -> &mut Self;
+    fn generate_ms_links(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
+    fn pick_one_game_from_report(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn unzip_update<F: Fn(&OsStr) -> bool>(&self, game_short_name: &str, file_name: &str, version: Option<&str>, unzip_skip_fun: Option<F>) -> ResultManagerErr<&Self>
@@ -141,6 +145,7 @@ impl REvilManager {
             games_that_require_update: [].to_vec(),
             selected_assets: Vec::new(),
             config_loading_error_ocurred: false,
+            new_steam_game_found: false,
             selected_game_to_launch: None,
         }
     }
@@ -168,7 +173,6 @@ impl REvilManager {
                 return Ok(());
             },
         };
-        return Ok(());
     }
 
     pub fn sort(a: &str, b: &str) -> Ordering {
@@ -239,6 +243,7 @@ impl REvilThings for REvilManager {
                 ..GameConfig::default()
             };
 
+            let len_before = self.config.games.len();
             self.config.games
                 .entry(game_short_name.to_string())
                 .and_modify(|game| {
@@ -250,6 +255,11 @@ impl REvilThings for REvilManager {
                     };
                 })
                 .or_insert(game_config);
+            let len_after = self.config.games.len();
+            if len_after > len_before {
+                self.new_steam_game_found = true;
+            }
+
         });
         trace!("Steam configs after initialization {:#?}", self.config.games);
         Ok(self)
@@ -272,7 +282,10 @@ impl REvilThings for REvilManager {
                 .local_provider
                 .get_local_report_for_game(game_location, short_name);
             config.runtime = local_config.runtime;
-            if local_config.version.is_some() {
+
+            // check fo config.versions  is called because maybe found new steam game and we don't want to
+            // replace versions information for other games  
+            if local_config.version.is_some() && config.versions.is_none() {
                 config.versions = Some([[local_config.version.unwrap()].to_vec()].to_vec());
             }
             config.nextgen = local_config.nextgen;
@@ -287,6 +300,40 @@ impl REvilThings for REvilManager {
 
         trace!("Full config: \n {:#?}", self.config);
         self
+    }
+
+    fn generate_ms_links(&mut self) -> ResultManagerErr<&mut Self> {
+        match env::current_exe() {
+            Ok(current_exe_path) => {
+                let ms_links_folder = Path::new("REFR_links");
+                fs::create_dir_all(&ms_links_folder)
+                    .map_err(|err| 
+                        Report::new(REvilManagerError::FailedToCreateMsLink(format!("Error during create_dir_all path {} Err {}", ms_links_folder.display(), err))))?;
+
+                self.config.games.iter().try_for_each(|(short_name, _)| -> ResultManagerErr<()> {
+                    let ms_link_name = format!("REFR_{}.lnk", short_name);
+                    let ms_link_path = ms_links_folder.join(Path::new(&ms_link_name));
+                    if ms_link_path.exists() {
+                        debug!("Ms link already exists for {} Path {}", short_name, ms_link_path.display());
+                        return Ok(());
+                    }
+
+                    let arguments = format!("--run {}", short_name);
+                    match create_ms_lnk(&ms_link_path, &current_exe_path, Some(arguments.clone())).or_else(|err|
+                                            Err(Report::new(REvilManagerError::FailedToCreateMsLink(
+                                                format!("Failed for {} Ms Link path {} Current exe path {} args {}", short_name, ms_link_path.display(), current_exe_path.display(), arguments))))
+                                                .attach_printable(format!("{:?}", err))
+                                        ) {
+                        Ok(_) => info!("Ms link created for {}", short_name),
+                        Err(err) => { warn!("{}", err); debug!("{:?}", err); } ,
+                    };
+                    return Ok(());
+                })?;
+
+                return Ok(self);
+            },
+            Err(err) => { return Err(Report::new(REvilManagerError::FailedToCreateMsLink(format!("current_exe error: {}", err)))); },
+        };
     }
 
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self> {
@@ -335,60 +382,53 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    // TODO consider testing scenario for games without NEXTGEN option like i.e. only ["MHRISE". "DCM5", "RE8"]
-    fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>  {
-        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like 
-        // MHRISE DMC5 then it should not change thus should not display specific message later
-        let mut different_found = false;
-        // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
-        let mut any_none = false;
-        let mut games: HashMap<String, (&ReleaseAsset, Option<bool>, Option<SteamId>)> = HashMap::new(); 
+    fn pick_one_game_from_report(&mut self) -> ResultManagerErr<&mut Self> {
+        let game_short_name;
+        unsafe {
+            game_short_name = &ARGS.as_ref().unwrap().run;
+        }
+        let game_config = self.config.games.get(game_short_name).unwrap();
+        let steam_id = game_config.steamId.as_ref().unwrap();
+        self.selected_game_to_launch = Some(steam_id.to_string());
+        if !self.games_that_require_update.contains(&game_short_name.to_string()) {
+            info!("Update not required");
+            return Ok(self);
+        }
         let rel_manager = self.github_release_manager.as_ref();
         let rel_manager = rel_manager.ok_or(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         let report = rel_manager.getAssetsReport();
-        report.iter().for_each(|(short_name, assets)| {
-            if self.games_that_require_update.contains(short_name) {
+        let nextgen = game_config.nextgen.unwrap();
+        match report.iter().find(|(short_name, _)| {
+                    *short_name == game_short_name
+                }) {
+            Some((short_name, assets)) => {
                 assets.iter().for_each(|asset| {
-                    let mut text;
-                    let mut include_for_all_option = Some(true);
-                    let game_config = self.config.games.get(short_name).unwrap();
-
-                    if GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
-                        different_found = true;
-                        let nextgen = game_config.nextgen;                    
-                        let tdb = create_TDB_string(short_name);
-                        if asset.name.contains(&tdb) {
-                            text = format!("{} Standard version", short_name);
-                            if nextgen.is_some() && nextgen.unwrap() {
-                                include_for_all_option = Some(false);
-                                text = format!("{}      {}(your current version of mod is nextgen -> it will switch to standard)", text, SORT_DETERMINER)
-                            } else if nextgen.is_none() {
-                                include_for_all_option = None;
-                                any_none = true;
-                            };
-                        } else {
-                            text = format!("{} Nextgen version", short_name);
-                            if nextgen.is_some() && !nextgen.unwrap() {
-                                include_for_all_option = Some(false);
-                                text = format!("{}      {}(your current version of mod is standard -> it will switch to nextgen)", text, SORT_DETERMINER)
-                            } else if nextgen.is_none() {
-                                include_for_all_option = None;
-                                any_none = true;
-                            };
-                        }
-                    } else {
-                        text = short_name.to_string();
+                    match does_asset_is_tdb(short_name, asset) {
+                        Some(is_tdb) => {
+                            if is_tdb && !nextgen {
+                                return self.selected_assets.push(asset.clone());
+                            } else if !is_tdb && nextgen {
+                                return self.selected_assets.push(asset.clone());
+                            }
+                        },
+                        None => self.selected_assets.push(asset.clone()),
                     }
-                    games.insert(text, (asset, include_for_all_option, game_config.steamId.clone()));
-                });
-            }
-        });
+                })
+            },
+            None => { debug!("Report doesn't contain {} game", game_short_name); return Ok(self); },
+        };
+        Ok(self)
+    }
+
+    // TODO consider testing scenario for games without NEXTGEN option like i.e. only ["MHRISE". "DCM5", "RE8"]
+    fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>  {
+        let (different_found, any_none, games) = &self.prepare_decision_report()?;
         let mut selections = vec![];
          if games.len() > 0 {
             selections.push("Update all games".to_string());
-            if different_found && !any_none {
+            if *different_found && !any_none {
                 selections[0] = format!("{} - (will choose base of your current local mod settings per game)", selections[0])
-            } else if different_found && any_none {
+            } else if *different_found && *any_none {
                 selections.push(format!("{} - prefer standard", selections[0]));
                 selections[0] = format!("{} - prefer nextgen", selections[0]);
             }
@@ -404,7 +444,7 @@ impl REvilThings for REvilManager {
 
         let count = self.games_that_require_update.len();
         let mut additional_text = "";
-        if different_found && any_none {
+        if *different_found && *any_none {
             additional_text = r"Also found that some of your games that
              can support both types Nextgen/Standard don't have mod installed.
              Chose which mod type use for them. For other games program will use correct version.";
@@ -425,19 +465,19 @@ impl REvilThings for REvilManager {
      
         debug!("selection {}, different_found {}, any_none {}", selection, different_found, any_none);
         
-        if selection == 0 || (different_found && any_none && selection == 1)  {
+        if selection == 0 || (*different_found && *any_none && selection == 1)  {
             games.values().for_each(|(asset, include, _)| {
                 if include.is_some() && include.unwrap() {
                     debug!("adding asset {}", asset.name);
-                    return self.selected_assets.push(asset.clone().clone());
+                    return self.selected_assets.push(asset.clone());
                 }
-                if include.is_none() && different_found && any_none && selection == 0 && !asset.name.contains(STANDARD_TYPE_QUALIFIER) {
+                if include.is_none() && *different_found && *any_none && selection == 0 && !asset.name.contains(STANDARD_TYPE_QUALIFIER) {
                     debug!("adding nextgen asset for {}", asset.name);
-                    return self.selected_assets.push(asset.clone().clone());
+                    return self.selected_assets.push(asset.clone());
                 }
-                if include.is_none() && different_found && any_none && selection == 1 && asset.name.contains(STANDARD_TYPE_QUALIFIER) {
+                if include.is_none() && *different_found && *any_none && selection == 1 && asset.name.contains(STANDARD_TYPE_QUALIFIER) {
                     debug!("adding standard asset for {}", asset.name);
-                    self.selected_assets.push(asset.clone().clone())
+                    self.selected_assets.push(asset.clone())
                 }
             });
                 return Ok(self);
@@ -631,18 +671,6 @@ impl REvilThings for REvilManager {
         todo!()
     }
 
-    fn launch_game(&mut self) -> ResultManagerErr<&mut Self>{
-        if let Some(steam_id) = &self.selected_game_to_launch {
-            self.before_launch_procedure(steam_id)?;
-            
-            info!("Launching the game");
-            self.steam_menago.run_game_via_steam_manager(&steam_id).change_context(REvilManagerError::default())?
-        } else {
-            info!("Game to launch is none")
-        };
-        Ok(self)
-    }
-
     fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
         let (game_short_name, game_config) = self.find_game_conf_by_steam_id(steam_id)?;
         if game_config.versions.is_none() {
@@ -672,6 +700,18 @@ impl REvilThings for REvilManager {
 
         info!("Before launch procedure - end");
         Ok(())
+    }
+
+    fn launch_game(&mut self) -> ResultManagerErr<&mut Self>{
+        if let Some(steam_id) = &self.selected_game_to_launch {
+            self.before_launch_procedure(steam_id)?;
+            
+            info!("Launching the game");
+            self.steam_menago.run_game_via_steam_manager(&steam_id).change_context(REvilManagerError::default())?
+        } else {
+            info!("Game to launch is none")
+        };
+        Ok(self)
     }
 
     fn find_game_conf_by_steam_id(&self, steam_id: &String) -> ResultManagerErr<(&String, &GameConfig)> {
@@ -714,6 +754,58 @@ impl REvilThings for REvilManager {
                 self
             }
         }
+    }
+}
+
+impl REvilManager {
+    fn prepare_decision_report(&self) -> ResultManagerErr<(bool, bool, HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>)> {
+        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like 
+        // MHRISE DMC5 then it should not change thus should not display specific message later
+        let mut different_found = false;
+        // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
+        let mut any_none = false;
+        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> = HashMap::new();
+        let rel_manager = self.github_release_manager.as_ref();
+        let rel_manager = rel_manager.ok_or(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
+        let report = rel_manager.getAssetsReport();
+        report.iter().for_each(|(short_name, assets)| {
+            if self.games_that_require_update.contains(short_name) {
+                assets.iter().for_each(|asset| {
+                    let mut text;
+                    let mut include_for_all_option = Some(true);
+                    let game_config = self.config.games.get(short_name).unwrap();
+
+                    if GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
+                        different_found = true;
+                        let nextgen = game_config.nextgen;                    
+                        let tdb = create_TDB_string(short_name);
+                        if asset.name.contains(&tdb) {
+                            text = format!("{} Standard version", short_name);
+                            if nextgen.is_some() && nextgen.unwrap() {
+                                include_for_all_option = Some(false);
+                                text = format!("{}      {}(your current version of mod is nextgen -> it will switch to standard)", text, SORT_DETERMINER)
+                            } else if nextgen.is_none() {
+                                include_for_all_option = None;
+                                any_none = true;
+                            };
+                        } else {
+                            text = format!("{} Nextgen version", short_name);
+                            if nextgen.is_some() && !nextgen.unwrap() {
+                                include_for_all_option = Some(false);
+                                text = format!("{}      {}(your current version of mod is standard -> it will switch to nextgen)", text, SORT_DETERMINER)
+                            } else if nextgen.is_none() {
+                                include_for_all_option = None;
+                                any_none = true;
+                            };
+                        }
+                    } else {
+                        text = short_name.to_string();
+                    }
+                    games.insert(text, (asset.clone(), include_for_all_option, game_config.steamId.clone()));
+                });
+            }
+        });
+        Ok((different_found, any_none, games))
     }
 }
 
