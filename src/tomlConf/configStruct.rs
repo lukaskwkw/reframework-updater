@@ -53,6 +53,12 @@ impl Runtime {
             Runtime::OpenXR => Runtime::OpenVR.as_local_dll(),
         }
     }
+    pub fn as_opposite(&self) -> Runtime {
+        match self {
+            Runtime::OpenVR => Runtime::OpenXR,
+            Runtime::OpenXR => Runtime::OpenVR,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
