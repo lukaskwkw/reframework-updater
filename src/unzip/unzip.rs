@@ -7,24 +7,26 @@ use log::debug;
 use log::info;
 use log::trace;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
-pub fn unzip(
-    files_to_skip: Vec<&str>,
+pub fn unzip<F>(
     file_to_unzip: impl AsRef<Path>,
     destination: impl AsRef<Path>,
-    dry_run: bool,
-) -> Result<bool, UnzipError> {
+    should_skip_this_file: Option<F>,
+)
+-> Result<bool, UnzipError> 
+where 
+F: Fn(&OsStr) -> bool
+{
     info!(
         "Unzipping files from {} to {}",
         file_to_unzip.as_ref().display(),
         destination.as_ref().display()
     );
-    debug!("Files to skip {:?}", files_to_skip);
-
     let file = fs::File::open(&file_to_unzip)
         .report()
         .change_context(UnzipError::other)?;
@@ -63,10 +65,6 @@ pub fn unzip(
                 None => return Err(Report::new(UnzipError::OutpathFileName)),
             };
 
-            if files_to_skip.iter().any(|fname| &file_name == fname) {
-                continue;
-            }
-
             trace!(
                 "File {} extracted to \"{}\" ({} bytes)",
                 i,
@@ -74,10 +72,13 @@ pub fn unzip(
                 file.size()
             );
 
-            if dry_run {
-                debug!("Nothing copied - dryRun!");
-                continue;
-            }
+            if let Some(ref fun) = should_skip_this_file {
+                if fun(file_name) {
+                    debug!("should_skip_this_file is true -> File {:?} not extracted", file_name);
+                    continue;
+                }
+            };
+            
             if let Some(p) = final_path.parent() {
                 if !p.exists() {
                     fs::create_dir_all(&p)
