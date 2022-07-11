@@ -55,6 +55,13 @@ F: Fn(&OsStr) -> bool
         }
 
         if (*file.name()).ends_with('/') {
+            if let Some(ref fun) = should_skip_this_file {
+                if fun(OsStr::new(file.name())) {
+                    trace!("Skip folder {:?} Folder not extracted", file.name());
+                    continue;
+                }
+            };
+
             trace!("File {} extracted to \"{}\"", i, final_path.display());
             fs::create_dir_all(&final_path)
                 .report()
@@ -65,19 +72,19 @@ F: Fn(&OsStr) -> bool
                 None => return Err(Report::new(UnzipError::OutpathFileName)),
             };
 
+            if let Some(ref fun) = should_skip_this_file {
+                if fun(file_name) {
+                    trace!("Skip File {:?} File not extracted", file_name);
+                    continue;
+                }
+            };
+
             trace!(
                 "File {} extracted to \"{}\" ({} bytes)",
                 i,
                 final_path.display(),
                 file.size()
             );
-
-            if let Some(ref fun) = should_skip_this_file {
-                if fun(file_name) {
-                    debug!("should_skip_this_file is true -> File {:?} not extracted", file_name);
-                    continue;
-                }
-            };
             
             if let Some(p) = final_path.parent() {
                 if !p.exists() {

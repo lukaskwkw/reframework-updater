@@ -59,7 +59,7 @@ impl Runtime {
 pub struct GameConfig {
     pub location: Option<String>,
     pub steamId: Option<SteamId>,
-    pub versions: Option<Vec<String>>,
+    pub versions: Option<Vec<Vec<String>>>,
     pub nextgen: Option<bool>,
     pub runtime: Option<Runtime>,
     pub runArgs: Option<String>,
