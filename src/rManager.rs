@@ -110,6 +110,7 @@ pub trait REvilThings {
     fn self_update(&mut self) -> DynResult<&mut Self>;
     fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()>;
     fn launch_game(&mut self) -> ResultManagerErr<&mut Self>;
+    fn find_game_conf_by_steam_id(&self, steam_id: &String) -> ResultManagerErr<(&String, &GameConfig)>;
     fn bind(
         &mut self,
         cb: impl Fn(&mut REvilManager) -> ResultManagerErr<&mut Self>,
@@ -178,10 +179,6 @@ impl REvilManager {
         } else {
             Ordering::Less
         }
-    }
-    
-    pub fn remove_second_runtime_file_if_applicable() {
-        todo!();
     }
 }
 
@@ -254,7 +251,7 @@ impl REvilThings for REvilManager {
                 })
                 .or_insert(game_config);
         });
-
+        trace!("Steam configs after initialization {:#?}", self.config.games);
         Ok(self)
     }
 
@@ -578,12 +575,25 @@ impl REvilThings for REvilManager {
             return Ok(self);
         }
 
-        let selections_h_map: HashMap<String, &SteamId> = self.config.games.iter().map(|(short_name, game)| {
-            (format!("Run {}", short_name), game.steamId.as_ref().unwrap())
-            // TODO maybe format!("{} Runtime {} Mod version {}", short_name, game.nextgen, game.versions.unwrap().first())
-        }).collect();
+        let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
+
+        &self.config.games.iter().for_each(|(short_name, game)| {
+            if game.versions.is_none() {
+                debug!("Game versions vector for {} not found", short_name);
+                selections_h_map.insert(format!("Run {}", short_name), game.steamId.as_ref().unwrap());
+                return;
+            }
+            let versions = game.versions.as_ref().unwrap();
+            if versions.first().unwrap().len() > 1 && game.runtime.is_some() {
+                selections_h_map.insert(format!("Run {} - Runtime <{:?}>", short_name, game.runtime.as_ref().unwrap()), game.steamId.as_ref().unwrap());
+                selections_h_map.insert(format!("{}: Switch to <{:?}> runtime for {} and run game", SORT_DETERMINER, game.runtime.as_ref().unwrap().as_opposite(), short_name), game.steamId.as_ref().unwrap());
+            } else {
+                selections_h_map.insert(format!("Run {}", short_name), game.steamId.as_ref().unwrap());
+            }
+          });
 
         let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
+        selections.sort_by(|a,b| REvilManager::sort(a, b));
         selections.push("Exit".to_string());
         let selection = Select::with_theme(&ColorfulTheme::default())
         
@@ -596,8 +606,20 @@ impl REvilThings for REvilManager {
             info!("Chosen exit option. Bye bye..");
             return Ok(self);
         }
-        let game_ids: Vec<&SteamId> = selections_h_map.values().cloned().collect();
-        self.selected_game_to_launch = Some(game_ids[selection].to_string());
+
+        let selected_text = &selections[selection];
+        let selected_steam_id = selections_h_map.get(&selections[selection]).unwrap().clone().to_string();
+
+        if selected_text.contains(SORT_DETERMINER) {
+            let (game_short_name, _) = self.find_game_conf_by_steam_id(&selected_steam_id)?;
+            let game_short_name = game_short_name.clone();
+            let game_config = self.config.games.get_mut(&game_short_name);
+            let conf = game_config.unwrap();
+            let runtime = conf.runtime.as_ref().unwrap();
+            info!("Switching runtime {:?} to {:?} for {}", runtime, runtime.as_opposite(), game_short_name);
+            conf.runtime = Some(runtime.as_opposite());
+        }
+        self.selected_game_to_launch = Some(selected_steam_id.clone().to_string());
         Ok(self)
     }
 
@@ -613,20 +635,20 @@ impl REvilThings for REvilManager {
         if let Some(steam_id) = &self.selected_game_to_launch {
             self.before_launch_procedure(steam_id)?;
             
+            info!("Launching the game");
             self.steam_menago.run_game_via_steam_manager(&steam_id).change_context(REvilManagerError::default())?
         } else {
-            warn!("Game to launch is none")
+            info!("Game to launch is none")
         };
-        info!("Launching the game");
         Ok(self)
     }
 
     fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
-        let (game_short_name, game_config) = self.config.games.iter().find(|(_, conf)| {
-            conf.steamId.as_ref().unwrap() == steam_id
-        }).ok_or(
-            Report::new(REvilManagerError::GameNotFoundForGivenSteamId(steam_id.to_string())))?;
-
+        let (game_short_name, game_config) = self.find_game_conf_by_steam_id(steam_id)?;
+        if game_config.versions.is_none() {
+            debug!("Version vector is empty for {}", game_short_name);
+            return Ok(());
+        }
         let version_vec = game_config.versions.as_ref().unwrap().first().unwrap();
         if version_vec.len() < 2 {
             debug!("Mod version has no cache file");
@@ -646,13 +668,18 @@ impl REvilThings for REvilManager {
             info!("Unzipped only {} file", runtime.as_local_dll());
         }
 
-        let file_to_remove = game_dir.join(runtime.as_opposite_local_dll());
-        if Path::new(&file_to_remove).exists() {
-            fs::remove_file(&file_to_remove).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()))?;
-            info!("File {} removed", file_to_remove.display().to_string());
-        }
+        remove_second_runtime_file(game_config)?;
+
         info!("Before launch procedure - end");
         Ok(())
+    }
+
+    fn find_game_conf_by_steam_id(&self, steam_id: &String) -> ResultManagerErr<(&String, &GameConfig)> {
+        let (game_short_name, game_config) = self.config.games.iter().find(|(_, conf)| {
+            conf.steamId.as_ref().unwrap() == steam_id
+        }).ok_or(
+            Report::new(REvilManagerError::GameNotFoundForGivenSteamId(steam_id.to_string())))?;
+        Ok((game_short_name, game_config))
     }
 
     fn bind(
@@ -690,7 +717,7 @@ impl REvilThings for REvilManager {
     }
 }
 
-fn remove_second_runtime_file(game_config: &mut GameConfig) -> ResultManagerErr<()> {
+fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> {
     let game_folder = Path::new(game_config.location.as_ref().unwrap());
     let open_runtime_path = game_folder.join(game_config.runtime.as_ref().unwrap().as_opposite_local_dll());
     Ok(if Path::new(&open_runtime_path).exists() {
@@ -712,7 +739,9 @@ fn cleanup_cache(manager: &Box<dyn ManageGithub<REFRGithub>>, last_ver: &Vec<Str
     Ok(if cache_dir.exists() {
     
     let file_to_remove = cache_dir.join(last_ver[1].to_string());
-    fs::remove_file(&file_to_remove).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()))?;
+    if Path::new(&file_to_remove).exists()  {
+        fs::remove_file(&file_to_remove).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()))?;
+    }
     match fs::remove_dir(&cache_dir) {
             Ok(()) => debug!("Directory: {} Removed",  cache_dir.display().to_string()),
             Err(err) => debug!("Can not Remove directory: {} Err {}",  cache_dir.display().to_string(),err),

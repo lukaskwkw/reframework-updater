@@ -47,11 +47,11 @@ impl Strategy for CheckAndRest {
             )
             .after_unzip_work()
             .unwrap()
-            .save_config()
-            .unwrap()
             .ask_for_game_decision_if_needed()
             .unwrap()
             .launch_game()
+            .unwrap()
+            .save_config()
             .unwrap();
     }
 }

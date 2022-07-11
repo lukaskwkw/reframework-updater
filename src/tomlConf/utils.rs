@@ -73,7 +73,7 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
             let config = match Value::from_value(v.to_owned()) {
                 Ok(it) => it,
                 Err(err) => {
-                    eprintln!("games toml::from_value error: {}", err);
+                    eprintln!("Deserializer error - Reading {} game config {:#?} from toml \n toml::from_value error: {}", s, v.to_string(), err);
                     return None;
                 }
             };
