@@ -30,9 +30,11 @@ pub enum REvilManagerError {
     ReleaseIsEmpty,
     CheckingNewReleaseErr,
     GameNotFoundForGivenShortName(String),
+    GameNotFoundForGivenSteamId(String),
     CannotDeductShortNameFromAssetName(String),
     RemoveFileFiled(String),
     RemoveZipAssetFromCacheErr(String),
+    CacheNotFoundForGivenVersion(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
     UnzipError,
@@ -60,7 +62,9 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::ReadDirError(info) => write!(f, "ReadDirError {}", info),
             REvilManagerError::LoadConfigError => write!(f, "LoadConfigError"),
             REvilManagerError::Other => write!(f, "Other"),
-            REvilManagerError::RemoveFileFiled(info) => write!(f, "RemoveZipAssetFromCacheErr {}", info),
+            REvilManagerError::RemoveFileFiled(info) => write!(f, "RemoveFileFiled {}", info),
+            REvilManagerError::GameNotFoundForGivenSteamId(info) => write!(f, "GameNotFoundForGivenSteamId {}", info),
+            REvilManagerError::CacheNotFoundForGivenVersion(info) => write!(f, "CacheNotFoundForGivenVersion {}", info),
         }
     }
 }
@@ -95,13 +99,16 @@ pub trait REvilThings {
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
-    fn unzip_update(&self, game_short_name: &str, file_name: &str) -> ResultManagerErr<&Self>;
+    fn unzip_update<F: Fn(&OsStr) -> bool>(&self, game_short_name: &str, file_name: &str, version: Option<&str>, unzip_skip_fun: Option<F>) -> ResultManagerErr<&Self>
+    where 
+    F: Fn(&OsStr) -> bool;
     fn unzip_updates(&self) -> ResultManagerErr<&Self>;
     fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
     fn self_update(&mut self) -> DynResult<&mut Self>;
+    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()>;
     fn launch_game(&mut self) -> ResultManagerErr<&mut Self>;
     fn bind(
         &mut self,
@@ -137,18 +144,30 @@ impl REvilManager {
         }
     }
 
-    pub fn unzip(file: impl AsRef<Path>, destination: impl AsRef<Path>, runtime: &Option<Runtime>) -> ResultManagerErr<()> {
+    pub fn unzip<F>(file: impl AsRef<Path>, destination: impl AsRef<Path>, runtime: &Option<Runtime>, skip_fun: Option<F>) -> ResultManagerErr<()> 
+    where 
+    F: Fn(&OsStr) -> bool {
         match runtime {
-        Some(it) => {
-            let should_skip = |file: &OsStr| file == OsStr::new(&it.as_opposite_local_dll());
-            unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?
-        },
-        None => {
-            let should_skip = |file: &OsStr| file == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
-            unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?
-        },
+            Some(it) => {
+                let should_skip = |file: &OsStr| file == OsStr::new(&it.as_opposite_local_dll());
+                if skip_fun.is_none() {
+                    unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?;
+                } else {
+                    unzip::unzip(file, destination, skip_fun).change_context(REvilManagerError::UnzipError)?;
+                }
+                return Ok(());
+            },
+            None => {
+                let should_skip = |file: &OsStr| file == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
+                if skip_fun.is_none() {
+                    unzip::unzip(file, destination, Some(should_skip)).change_context(REvilManagerError::UnzipError)?;
+                } else {
+                    unzip::unzip(file, destination, skip_fun).change_context(REvilManagerError::UnzipError)?;
+                }
+                return Ok(());
+            },
         };
-        Ok(())
+        return Ok(());
     }
 
     pub fn sort(a: &str, b: &str) -> Ordering {
@@ -257,7 +276,7 @@ impl REvilThings for REvilManager {
                 .get_local_report_for_game(game_location, short_name);
             config.runtime = local_config.runtime;
             if local_config.version.is_some() {
-                config.versions = Some([local_config.version.unwrap()].to_vec());
+                config.versions = Some([[local_config.version.unwrap()].to_vec()].to_vec());
             }
             config.nextgen = local_config.nextgen;
             /* TODO this info doesn't show in console log check why or erase it
@@ -296,12 +315,12 @@ impl REvilThings for REvilManager {
                 let latest_local_version = game.versions.as_ref().unwrap().first().unwrap();
                 let latest_github_version = release.as_ref().ok_or(Report::new(REvilManagerError::ReleaseIsEmpty))?.name.as_ref();
                 debug!(
-                    "Local version [{}], repo version [{}] for {}",
+                    "Local version [{:?}], repo version [{}] for {}",
                     latest_local_version, latest_github_version, short_name
                 );
 
                 let is_rnewer =
-                    isRepoVersionNewer(latest_local_version, latest_github_version);
+                    isRepoVersionNewer(latest_local_version.first().unwrap(), latest_github_version);
                 if is_rnewer.is_some() && is_rnewer.unwrap() {
                     self.games_that_require_update.push(short_name.to_string());
                 };
@@ -393,7 +412,7 @@ impl REvilThings for REvilManager {
              can support both types Nextgen/Standard don't have mod installed.
              Chose which mod type use for them. For other games program will use correct version.";
         }
-        selections.push("Exit".to_string());
+        selections.push("Skip".to_string());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text))
             .default(0)
@@ -403,7 +422,7 @@ impl REvilThings for REvilManager {
 
         // important do not change order of below if call as later in iteration can provide out of index error
         if selection == (selections.len() -1) {
-            info!("Chosen exit option. Bye bye..");
+            info!("Chosen skip option.");
             return Ok(self);
         }
      
@@ -448,14 +467,17 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    fn unzip_update(&self, game_short_name: &str, file_name: &str) -> ResultManagerErr<&Self> {
+    fn unzip_update<F>(&self, game_short_name: &str, file_name: &str, version: Option<&str>, unzip_skip_fun: Option<F>) -> ResultManagerErr<&Self> 
+    where 
+    F: Fn(&OsStr) -> bool
+    {
         let game_config = self.config.games.get(game_short_name).ok_or(
             Report::new(REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string())))?;
             let manager = self.github_release_manager.as_ref().ok_or(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
-            let path = manager.get_local_path_to_cache(None).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
+            let path = manager.get_local_path_to_cache(version).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
             let path = path.join(file_name);
             let location = game_config.location.as_ref().ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
-            REvilManager::unzip(path, location, &game_config.runtime)?;
+            REvilManager::unzip(path, location, &game_config.runtime, unzip_skip_fun)?;
         Ok(self)
     }
 
@@ -474,7 +496,7 @@ impl REvilThings for REvilManager {
             if game_short_name.is_none() { return Err(Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()))); };
 
             let game_short_name = game_short_name.unwrap();
-            self.unzip_update(game_short_name, &asset.name)?;
+            self.unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)?;
 
             Ok(())
         })?;
@@ -499,18 +521,16 @@ impl REvilThings for REvilManager {
             };
 
             if game_short_name.is_none() { return Err(Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()))); };
-
             let game_short_name = game_short_name.unwrap();         
-            
             let game_config = self.config.games.get_mut(game_short_name).ok_or(
                 Report::new(REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string())))?;
 
+            // add version from asset to array or create new array with the asset version
             if game_config.versions.is_some() {
                 let versions = game_config.versions.as_mut().unwrap();
-                versions.insert(0, version.to_string());
-
+                versions.insert(0, [version.to_string(), asset.name.to_string()].to_vec());
             } else {
-                game_config.versions = Some([version.to_string()].to_vec());
+                game_config.versions = Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec());
             };
 
             // set NEXTGEN accordingly to an asset but only for the supported games
@@ -524,21 +544,13 @@ impl REvilThings for REvilManager {
 
             // remove second, not needed runtime file as for example when switching between different runtime versions 
             // second file may persists therefore blocking loading OpenXR runtime from loading
-            let game_folder = Path::new(game_config.location.as_ref().unwrap());
-            let open_runtime_path = game_folder.join(game_config.runtime.as_ref().unwrap().as_opposite_local_dll());
-            if Path::new(&open_runtime_path).exists() {
-                fs::remove_file(&open_runtime_path).report().change_context(REvilManagerError::RemoveFileFiled(open_runtime_path.display().to_string()))?;
-            }
+            remove_second_runtime_file(game_config)?;
 
             // it is ok to unwrap as in previous step we added array to that game config
             let versions = game_config.versions.as_ref().unwrap();
             if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
                 let last_ver = versions.last().unwrap();
-                // if local version is just a hash (not contains '.') then probably there is no backup folder for it too so don't try to delete this file
-                // TODO but this can change if considered adding support for zipping first discovered mod version and preserving it
-                if last_ver.contains('.') {
-                    cleanup_cache(manager, last_ver, game_short_name, asset)?;
-                };
+                cleanup_cache(manager, last_ver, game_short_name)?;
                 
                 // after cleaning up cache remove last item from versions vector
                 let mut versions = versions.clone();
@@ -598,12 +610,49 @@ impl REvilThings for REvilManager {
     }
 
     fn launch_game(&mut self) -> ResultManagerErr<&mut Self>{
-        match &self.selected_game_to_launch {
-            Some(steam_id) => self.steam_menago.run_game_via_steam_manager(&steam_id).change_context(REvilManagerError::default())?,
-            None => warn!("Game to launch is none"),
+        if let Some(steam_id) = &self.selected_game_to_launch {
+            self.before_launch_procedure(steam_id)?;
+            
+            self.steam_menago.run_game_via_steam_manager(&steam_id).change_context(REvilManagerError::default())?
+        } else {
+            warn!("Game to launch is none")
         };
         info!("Launching the game");
         Ok(self)
+    }
+
+    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
+        let (game_short_name, game_config) = self.config.games.iter().find(|(_, conf)| {
+            conf.steamId.as_ref().unwrap() == steam_id
+        }).ok_or(
+            Report::new(REvilManagerError::GameNotFoundForGivenSteamId(steam_id.to_string())))?;
+
+        let version_vec = game_config.versions.as_ref().unwrap().first().unwrap();
+        if version_vec.len() < 2 {
+            debug!("Mod version has no cache file");
+            return Ok(());
+        }
+        info!("Before launch procedure - start");
+        let game_dir = game_config.location.as_ref().unwrap();
+        let game_dir = Path::new(&game_dir);
+
+        let runtime = game_config.runtime.as_ref().unwrap();
+        if !game_dir.join(runtime.as_local_dll()).exists() {
+            let should_skip_all_except = |file: &OsStr| file != OsStr::new(&runtime.as_local_dll());
+            let ver = &version_vec[0];
+            let file_name = &version_vec[1];
+
+            self.unzip_update(game_short_name, &file_name, Some(&ver), Some(should_skip_all_except))?;
+            info!("Unzipped only {} file", runtime.as_local_dll());
+        }
+
+        let file_to_remove = game_dir.join(runtime.as_opposite_local_dll());
+        if Path::new(&file_to_remove).exists() {
+            fs::remove_file(&file_to_remove).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()))?;
+            info!("File {} removed", file_to_remove.display().to_string());
+        }
+        info!("Before launch procedure - end");
+        Ok(())
     }
 
     fn bind(
@@ -641,41 +690,30 @@ impl REvilThings for REvilManager {
     }
 }
 
+fn remove_second_runtime_file(game_config: &mut GameConfig) -> ResultManagerErr<()> {
+    let game_folder = Path::new(game_config.location.as_ref().unwrap());
+    let open_runtime_path = game_folder.join(game_config.runtime.as_ref().unwrap().as_opposite_local_dll());
+    Ok(if Path::new(&open_runtime_path).exists() {
+        fs::remove_file(&open_runtime_path).report().change_context(REvilManagerError::RemoveFileFiled(open_runtime_path.display().to_string()))?;
+        debug!("Second runtime file removed {}", open_runtime_path.display());
+    } else {
+        debug!("Second runtime file doesn't exist {}", open_runtime_path.display());
+    })
+}
 
-fn cleanup_cache(manager: &Box<dyn ManageGithub<REFRGithub>>, last_ver: &String, game_short_name: &str, asset: &ReleaseAsset) -> ResultManagerErr<()> {
-    let cache_dir = manager.get_local_path_to_cache(Some(last_ver)).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
-    let mut second_version_of_archive : Option<String> = None;
-    if let Some(is_tdb) = does_asset_is_tdb(game_short_name, asset) {
-        if is_tdb { second_version_of_archive = Some(format!("{}.zip", game_short_name)); } else {
-            second_version_of_archive = Some(create_TDB_string(game_short_name)); }
-    };
 
+fn cleanup_cache(manager: &Box<dyn ManageGithub<REFRGithub>>, last_ver: &Vec<String>, game_short_name: &str) -> ResultManagerErr<()> {
+    if last_ver.len() < 2 {
+        debug!("A Game {} Cache warn: {:?}", game_short_name, REvilManagerError::CacheNotFoundForGivenVersion(last_ver[0].to_string()).to_string());
+        return Ok(());
+    }
+    let last_ver_nb = &last_ver[0];
+    let cache_dir = manager.get_local_path_to_cache(Some(&last_ver_nb)).or(Err(Report::new(REvilManagerError::ReleaseManagerIsNotInitialized)))?;
     Ok(if cache_dir.exists() {
-        for entry in fs::read_dir(&cache_dir).report().change_context(REvilManagerError::ReadDirError(cache_dir.display().to_string()))? {
-            let entry = entry.report().change_context(REvilManagerError::ReadDirError(format!("Entry err for {}", cache_dir.display().to_string())))?;
-            let path = entry.path();
-            if path.is_file() {
-                let file_name = path.file_name().unwrap();
-                let file_name = match file_name.to_str() {
-                    Some(it) => it,
-                    None => {
-                        debug!("File_name to_str failed: {:?}", file_name);
-                        "anything.txt"
-                    },
-                };
-
-                if file_name == &asset.name {
-                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
-                    debug!("File: {} Removed",  path.display().to_string());
-                }
-                if second_version_of_archive.is_some() && file_name.contains(second_version_of_archive.as_ref().unwrap()) {
-                    fs::remove_file(&path).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(path.display().to_string()))?;
-                    debug!("File: {} Removed",  path.display().to_string());
-                }
-            }
-        }
-
-        match fs::remove_dir(&cache_dir) {
+    
+    let file_to_remove = cache_dir.join(last_ver[1].to_string());
+    fs::remove_file(&file_to_remove).report().change_context(REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()))?;
+    match fs::remove_dir(&cache_dir) {
             Ok(()) => debug!("Directory: {} Removed",  cache_dir.display().to_string()),
             Err(err) => debug!("Can not Remove directory: {} Err {}",  cache_dir.display().to_string(),err),
         };
