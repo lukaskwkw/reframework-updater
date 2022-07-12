@@ -1,7 +1,7 @@
 use args::ArgsClap;
 
 #[cfg(target_os = "windows")]
-use rManager::REvilManager;
+use rManager_header::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
 
 use core::time;
@@ -38,6 +38,7 @@ pub mod strategy {
 }
 mod args;
 mod rManager;
+mod rManager_header;
 mod tomlConf {
     pub mod FromValue;
     pub mod config;
