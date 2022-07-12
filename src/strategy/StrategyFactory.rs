@@ -1,9 +1,6 @@
-use crate::{
-    args::parse_args,
-    rManager::{REvilManager, REvilThings, self}, ARGS,
-};
+use crate::{args::parse_args, rManager_header::REvilManager, rManager_header::REvilThings, ARGS};
 use error_stack::ResultExt;
-use log::{debug, info, Level};
+use log::Level;
 
 pub struct StrategyFactory;
 
@@ -16,11 +13,7 @@ struct ConfigFileNotFound {}
 struct LaunchAndSave;
 impl Strategy for LaunchAndSave {
     fn run(manager: &mut REvilManager) {
-        manager
-            .launch_game()
-            .unwrap()
-            .save_config()
-            .unwrap();
+        manager.launch_game().unwrap().save_config().unwrap();
     }
 }
 
@@ -54,7 +47,9 @@ impl Strategy for CheckUpdateAndRunTheGame {
             .bind(|this| this.download_REFramework_update(), Level::Error)
             .bind(
                 |this| {
-                    if let Err(err) = this.unzip_updates() { return Err(err); };
+                    if let Err(err) = this.unzip_updates() {
+                        return Err(err);
+                    };
                     Ok(this)
                 },
                 Level::Error,
@@ -74,7 +69,9 @@ impl Strategy for CheckAndRest {
             .bind(|this| this.download_REFramework_update(), Level::Error)
             .bind(
                 |this| {
-                    if let Err(err) = this.unzip_updates() { return Err(err); };
+                    if let Err(err) = this.unzip_updates() {
+                        return Err(err);
+                    };
                     Ok(this)
                 },
                 Level::Error,
@@ -86,6 +83,22 @@ impl Strategy for CheckAndRest {
         LaunchAndSave::run(manager);
     }
 }
+// struct EarlyLoad;
+// impl Strategy for EarlyLoad {
+//     fn run(manager: &mut REvilManager) {
+//         manager
+//         .load_config()
+//         .attach_printable("Error loading config file.")
+//         .map_or((), |xd| xd.attach_logger());
+//         ()
+//         // .and_then(|this| 
+//         //     this.load_games_from_steam()
+//         //     .attach_printable("Error detecting steam games. Check generated config file and try add game manually there.")
+//         // )
+//         // .unwrap();
+//     }
+// }
+
 struct EarlyLoad;
 impl Strategy for EarlyLoad {
     fn run(manager: &mut REvilManager) {
@@ -106,17 +119,23 @@ impl Strategy for EarlyLoad {
             );
     }
 }
+
 struct BindStrategy;
 impl Strategy for BindStrategy {
     fn run(manager: &mut REvilManager) {
         EarlyLoad::run(manager);
         manager
             .or_log_err(|this| this.generate_ms_links(), Level::Warn)
-            .bind(|this|{
-                // only check against local files when a config failed to be loaded and if steam found new game
-                if this.config_loading_error_ocurred || this.new_steam_game_found { return Ok(this.get_local_settings_per_game()); }
-                return Ok(this);
-            }, Level::Error);
+            .bind(
+                |this| {
+                    // only check against local files when a config failed to be loaded and if steam found new game
+                    if this.state.config_loading_error_ocurred || this.state.new_steam_game_found {
+                        return Ok(this.get_local_settings_per_game());
+                    }
+                    return Ok(this);
+                },
+                Level::Error,
+            );
         CheckAndRest::run(manager);
     }
 }
