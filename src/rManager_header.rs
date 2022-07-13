@@ -12,7 +12,7 @@ use crate::{
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{GameConfig, REvilConfig, SteamId},
+        configStruct::{GameConfig, REvilConfig, SteamId, ShortGameName},
     },
     utils::local_version::LocalFiles,
     DynResult,
@@ -84,6 +84,9 @@ impl Error for REvilManagerError {}
 #[derive(Debug, Default, PartialEq)]
 pub enum LabelOptions {
     SwitchType,
+    SwitchToStandard(String),
+    SwitchToNextgen(String),
+    SwitchRuntime,
     LoadDifferentVersionFromCache,
     Skip,
     Exit,
@@ -94,6 +97,8 @@ pub enum LabelOptions {
     #[default]
     Other,
 }
+
+pub static SWITCH_RUNTIME_PART: &str = "Switch runtime to";
 
 impl From<&str> for LabelOptions {
     fn from(text: &str) -> Self {
@@ -106,7 +111,27 @@ impl From<&str> for LabelOptions {
             "Update all games - prefer standard" => LabelOptions::UpdateAllGamesPreferStandard,
             "Update all games - prefer nextgen" => LabelOptions::UpdateAllGamesPreferNextgen,
             "Update all games - autodetect" => LabelOptions::UpdateAllGamesAutoDetect,
-            _ => LabelOptions::Other,
+            label => {
+                let option = label
+                    .contains("Switch type to |")
+                    .then(|| {
+                        let game_type = label.split('|').collect::<Vec<&str>>()[1];
+                        label.split_once(" - ").map(|(_, short_name)| {
+                            if game_type == "standard" {
+                                LabelOptions::SwitchToStandard(short_name.to_string())
+                            } else {
+                                LabelOptions::SwitchToNextgen(short_name.to_string())
+                            }
+                        })
+                    })
+                    .unwrap_or(
+                        label
+                            .contains(SWITCH_RUNTIME_PART)
+                            .then_some(LabelOptions::SwitchRuntime),
+                    )
+                    .unwrap_or(LabelOptions::Other);
+                option
+            }
         }
     }
 }
@@ -119,9 +144,19 @@ impl LabelOptions {
             LabelOptions::Skip => "Skip".to_string(),
             LabelOptions::Exit => "Exit".to_string(),
             LabelOptions::UpdateAllGames => "Update all games".to_string(),
-            LabelOptions::UpdateAllGamesPreferStandard => "Update all games - prefer standard".to_string(),
-            LabelOptions::UpdateAllGamesPreferNextgen => "Update all games - prefer nextgen".to_string(),
+            LabelOptions::UpdateAllGamesPreferStandard => {
+                "Update all games - prefer standard".to_string()
+            }
+            LabelOptions::UpdateAllGamesPreferNextgen => {
+                "Update all games - prefer nextgen".to_string()
+            }
             LabelOptions::UpdateAllGamesAutoDetect => "Update all games - autodetect".to_string(),
+            LabelOptions::SwitchToStandard(game_short_name) => {
+                format!("Switch type to |standard| - {}", game_short_name)
+            }
+            LabelOptions::SwitchToNextgen(game_short_name) => {
+                format!("Switch type to |nextgen| - {}", game_short_name)
+            }
             other => format!("{:?}", other),
         }
     }
@@ -130,12 +165,12 @@ impl LabelOptions {
 #[derive(Default)]
 pub struct REvilManagerState {
     pub skip_next: bool,
-    pub games_that_require_update: Vec<String>,
+    pub games_that_require_update: Vec<ShortGameName>,
     pub selected_assets: Vec<ReleaseAsset>,
     pub selected_game_to_launch: Option<SteamId>,
     pub config_loading_error_ocurred: bool,
     pub new_steam_game_found: bool,
-    pub other_option: Option<LabelOptions>,
+    pub selected_option: Option<LabelOptions>,
 }
 
 pub struct REvilManager {
