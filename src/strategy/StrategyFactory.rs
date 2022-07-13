@@ -8,7 +8,7 @@ trait Strategy {
     fn run(manager: &mut REvilManager);
 }
 
-struct ConfigFileNotFound {}
+// TODO: Consider adding save settings after unzip 
 
 struct LaunchAndSave;
 impl Strategy for LaunchAndSave {
@@ -26,7 +26,7 @@ impl StrategyFactory {
         unsafe {
             parse_args();
             if let Some(args) = &ARGS {
-                run = args.run.clone();
+                run = args.one.clone();
             };
         }
         if run != "none" {
@@ -55,6 +55,8 @@ impl Strategy for CheckUpdateAndRunTheGame {
                 Level::Error,
             )
             .after_unzip_work()
+            .unwrap()
+            .ask_for_game_decision_if_needed()
             .unwrap();
         LaunchAndSave::run(manager);
     }
@@ -79,6 +81,8 @@ impl Strategy for CheckAndRest {
             .after_unzip_work()
             .unwrap()
             .ask_for_game_decision_if_needed()
+            .unwrap()
+            .ask_for_switch_type_decision()
             .unwrap();
         LaunchAndSave::run(manager);
     }
