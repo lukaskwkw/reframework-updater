@@ -1,4 +1,7 @@
-use crate::{args::parse_args, rManager_header::REvilManager, rManager_header::REvilThings, ARGS};
+use crate::{
+    args::parse_args, rManager::rManager_header::REvilManager,
+    rManager::rManager_header::REvilThings, ARGS,
+};
 use error_stack::ResultExt;
 use log::Level;
 
@@ -8,7 +11,7 @@ trait Strategy {
     fn run(manager: &mut REvilManager);
 }
 
-// TODO: Consider adding save settings after unzip 
+// TODO: Maybe switch bind to and_then instead
 
 struct LaunchAndSave;
 impl Strategy for LaunchAndSave {
@@ -56,6 +59,8 @@ impl Strategy for CheckUpdateAndRunTheGame {
             )
             .after_unzip_work()
             .unwrap()
+            .save_config()
+            .unwrap()
             .ask_for_game_decision_if_needed()
             .unwrap();
         LaunchAndSave::run(manager);
@@ -80,6 +85,8 @@ impl Strategy for CheckAndRest {
             )
             .after_unzip_work()
             .unwrap()
+            .save_config()
+            .unwrap()
             .ask_for_game_decision_if_needed()
             .unwrap()
             .ask_for_switch_type_decision()
@@ -95,7 +102,7 @@ impl Strategy for CheckAndRest {
 //         .attach_printable("Error loading config file.")
 //         .map_or((), |xd| xd.attach_logger());
 //         ()
-//         // .and_then(|this| 
+//         // .and_then(|this|
 //         //     this.load_games_from_steam()
 //         //     .attach_printable("Error detecting steam games. Check generated config file and try add game manually there.")
 //         // )

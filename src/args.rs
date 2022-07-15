@@ -1,5 +1,3 @@
-use std::default;
-
 use clap::Parser;
 
 use crate::{tomlConf::configStruct::ErrorLevel, ARGS};
