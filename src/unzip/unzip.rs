@@ -2,11 +2,10 @@ use crate::unzip::UnzipError::UnzipError;
 use error_stack::IntoReport;
 use error_stack::Report;
 use error_stack::ResultExt;
-use error_stack::{ensure, Result};
+use error_stack::{Result};
 use log::debug;
 use log::info;
 use log::trace;
-use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
@@ -17,10 +16,9 @@ pub fn unzip<F>(
     file_to_unzip: impl AsRef<Path>,
     destination: impl AsRef<Path>,
     should_skip_this_file: Option<F>,
-)
--> Result<bool, UnzipError> 
-where 
-F: Fn(&OsStr) -> bool
+) -> Result<bool, UnzipError>
+where
+    F: Fn(&OsStr) -> bool,
 {
     info!(
         "Unzipping files from {} to {}",
@@ -85,7 +83,7 @@ F: Fn(&OsStr) -> bool
                 final_path.display(),
                 file.size()
             );
-            
+
             if let Some(p) = final_path.parent() {
                 if !p.exists() {
                     fs::create_dir_all(&p)

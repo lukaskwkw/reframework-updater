@@ -19,7 +19,7 @@ pub enum RunAfter {
 }
 
 impl RunAfter {
-    pub fn to_logical(&self) -> bool {
+    pub fn to_bool(&self) -> bool {
         match self {
             RunAfter::yes => true,
             RunAfter::no => false,
