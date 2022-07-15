@@ -4,7 +4,7 @@ use game_scanner::{manager, prelude::Game, steam};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
-    path::PathBuf, default,
+    path::PathBuf,
 };
 
 pub struct SteamManager;

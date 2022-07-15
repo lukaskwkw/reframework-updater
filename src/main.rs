@@ -1,7 +1,8 @@
 use args::ArgsClap;
 
+use dialogs::dialogs::Dialogs;
 #[cfg(target_os = "windows")]
-use rManager_header::REvilManager;
+use rManager::rManager_header::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
 
 use core::time;
@@ -23,9 +24,15 @@ mod utils {
     pub mod mslink;
     pub mod progress_style;
     pub mod version_parser;
+    pub mod find_game_conf_by_steam_id;
+    pub mod is_asset_tdb;
 }
 
 mod steam;
+pub mod dialogs {
+    pub mod dialogs;
+    pub mod dialogs_label;
+}
 pub mod unzip {
     pub mod UnzipError;
     pub mod unzip;
@@ -37,8 +44,11 @@ pub mod strategy {
     pub mod StrategyFactory;
 }
 mod args;
-mod rManager;
-mod rManager_header;
+mod rManager {
+    pub mod rManager;
+    pub mod rManager_header;
+    pub mod cleanup_cache;
+}
 mod tomlConf {
     pub mod FromValue;
     pub mod config;
@@ -76,10 +86,12 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let config_provider = Box::new(REvilConfigProvider::new("config.toml"));
     let steam_menago = Box::new(SteamManager);
     let local_provider = Box::new(LocalProvider);
+    let dialogs = Box::new(Dialogs);
     let mut evilManager = REvilManager::new(
         config_provider,
         local_provider,
         steam_menago,
+        dialogs,
         REFRGithub::new,
     );
 

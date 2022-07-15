@@ -1,4 +1,7 @@
-use crate::{args::parse_args, rManager_header::REvilManager, rManager_header::REvilThings, ARGS};
+use crate::{
+    args::parse_args, rManager::rManager_header::REvilManager,
+    rManager::rManager_header::REvilThings, ARGS,
+};
 use error_stack::ResultExt;
 use log::Level;
 
@@ -8,7 +11,7 @@ trait Strategy {
     fn run(manager: &mut REvilManager);
 }
 
-// TODO: Consider adding save settings after unzip 
+// TODO: Consider adding save settings after unzip
 
 struct LaunchAndSave;
 impl Strategy for LaunchAndSave {
@@ -95,7 +98,7 @@ impl Strategy for CheckAndRest {
 //         .attach_printable("Error loading config file.")
 //         .map_or((), |xd| xd.attach_logger());
 //         ()
-//         // .and_then(|this| 
+//         // .and_then(|this|
 //         //     this.load_games_from_steam()
 //         //     .attach_printable("Error detecting steam games. Check generated config file and try add game manually there.")
 //         // )
