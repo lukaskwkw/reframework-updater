@@ -31,7 +31,7 @@ use crate::{
 };
 
 use error_stack::{IntoReport, Report, Result, ResultExt};
-use log::{debug, info, log, trace, warn, Level};
+use log::{debug, error, info, log, trace, warn, Level};
 use std::time::Duration;
 
 use indicatif::ProgressBar;
@@ -370,10 +370,11 @@ impl REvilThings for REvilManager {
     }
 
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self> {
-        self.state
+        let results: Vec<ResultManagerErr<()>> = self
+            .state
             .selected_assets
             .iter()
-            .try_for_each(|asset| -> ResultManagerErr<()> {
+            .map(|asset| -> ResultManagerErr<()> {
                 self.github_release_manager
                     .as_ref()
                     .unwrap()
@@ -385,7 +386,15 @@ impl REvilThings for REvilManager {
                         ))
                     })?;
                 Ok(())
-            })?;
+            })
+            .collect();
+
+        results.iter().for_each(|result| {
+            result.as_ref().unwrap_or_else(|err| {
+                error!("{:?}", err);
+                &()
+            });
+        });
         Ok(self)
     }
 
@@ -419,32 +428,41 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    fn unzip_updates(&self) -> ResultManagerErr<&Self> {
+    fn unzip_updates(&mut self) -> &mut Self {
         let selected_assets = &self.state.selected_assets;
-        selected_assets
-            .iter()
-            .try_for_each(|asset| -> ResultManagerErr<()> {
-                let game_short_name = match asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
-                    Some(tdb_asset) => Some(tdb_asset.0),
-                    None => match asset.name.split_once(".zip") {
-                        Some(asset) => Some(asset.0),
-                        None => None,
-                    },
-                };
+        selected_assets.iter().for_each(|asset| {
+            let game_short_name = match asset.name.split_once(STANDARD_TYPE_QUALIFIER) {
+                Some(tdb_asset) => Some(tdb_asset.0),
+                None => match asset.name.split_once(".zip") {
+                    Some(asset) => Some(asset.0),
+                    None => None,
+                },
+            };
 
-                if game_short_name.is_none() {
-                    return Err(Report::new(
-                        REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()),
-                    ));
-                };
+            if game_short_name.is_none() {
+                error!(
+                    "{}",
+                    Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(
+                        asset.name.clone(),
+                    ))
+                    .to_string()
+                );
+                ()
+            };
 
-                let game_short_name = game_short_name.unwrap();
-                self.unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)?;
+            let game_short_name = game_short_name.unwrap();
+            self.unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)
+                .unwrap_or_else(|err| {
+                    error!(
+                        "Couldn't unzip asset {}: for {} game. Err {}",
+                        asset.name, game_short_name, err
+                    );
+                    self
+                });
+            ()
+        });
 
-                Ok(())
-            })?;
-
-        return Ok(self);
+        return self;
     }
 
     fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError> {
@@ -458,9 +476,9 @@ impl REvilThings for REvilManager {
             .ok_or(Report::new(REvilManagerError::ReleaseIsEmpty))?
             .name
             .as_ref();
-        selected_assets
+        let results: Vec<ResultManagerErr<()>> = selected_assets
             .iter()
-            .try_for_each(|asset| -> ResultManagerErr<()> {
+            .map(|asset| -> ResultManagerErr<()> {
                 info!("After unzip work - start");
                 // for TDB assets STANDARD_TYPE_QUALIFIER is used and for rest games included nextgens ".zip"
                 let game_short_name = asset
@@ -557,7 +575,15 @@ impl REvilThings for REvilManager {
                 debug!("{:?}", game_config.versions);
                 info!("After unzip work - done");
                 Ok(())
-            })?;
+            })
+            .collect();
+
+        results.iter().for_each(|result| {
+            result.as_ref().unwrap_or_else(|err| {
+                error!("{:?}", err);
+                &()
+            });
+        });
 
         return Ok(self);
     }

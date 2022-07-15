@@ -126,7 +126,7 @@ pub trait REvilThings {
     ) -> ResultManagerErr<&Self>
     where
         F: Fn(&OsStr) -> bool;
-    fn unzip_updates(&self) -> ResultManagerErr<&Self>;
+    fn unzip_updates(&mut self) -> &mut Self;
     fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
