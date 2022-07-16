@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     env,
     ffi::OsStr,
     fs,
@@ -8,7 +9,11 @@ use std::{
 };
 
 use crate::{
-    dialogs::dialogs::{Ask, SwitchActionReport},
+    args::RunAfter,
+    dialogs::{
+        dialogs::{Ask, SwitchActionReport},
+        dialogs_label::LabelOptions,
+    },
     rManager::cleanup_cache::cleanup_cache,
     rManager::rManager_header::{
         REvilManager, REvilManagerError, REvilManagerState, REvilThings, ResultManagerErr,
@@ -19,11 +24,12 @@ use crate::{
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{ErrorLevel, GameConfig, REvilConfig, Runtime},
+        configStruct::{ErrorLevel, GameConfig, REvilConfig, Runtime, ShortGameName},
     },
     unzip::unzip,
     utils::{
-        find_game_conf_by_steam_id::find_game_conf_by_steam_id, init_logger::init_logger,
+        find_game_conf_by_steam_id::find_game_conf_by_steam_id,
+        get_local_path_to_cache::get_local_path_to_cache_folder, init_logger::init_logger,
         is_asset_tdb::is_asset_tdb, local_version::LocalFiles, mslink::create_ms_lnk,
         progress_style, version_parser::isRepoVersionNewer,
     },
@@ -272,8 +278,9 @@ impl REvilThings for REvilManager {
             should_run_after = &ARGS.as_ref().unwrap().run;
         }
         debug!("Args -one {}, -run {:?}", game_short_name, should_run_after);
-        let game_config = self.config.games.get(game_short_name).unwrap();
-        let steam_id = game_config.steamId.as_ref().unwrap();
+        let games = &self.config.games;
+        let game_config = games.get(game_short_name).unwrap();
+        let steam_id = get_steam_id_by_short_name(games, game_short_name);
         if should_run_after.to_bool() {
             self.state.selected_game_to_launch = Some(steam_id.to_string());
         };
@@ -355,12 +362,10 @@ impl REvilThings for REvilManager {
         let manager = self.github_release_manager.as_ref().ok_or(Report::new(
             REvilManagerError::ReleaseManagerIsNotInitialized,
         ))?;
-        let path = manager
-            .get_local_path_to_cache(version)
+        let release = manager.getRelease();
+        let path = get_local_path_to_cache_folder(release, version)
             .map(|path| path.join(file_name))
-            .or(Err(Report::new(
-                REvilManagerError::ReleaseManagerIsNotInitialized,
-            )))?;
+            .or(Err(Report::new(REvilManagerError::GetLocalPathToCacheErr)))?;
         let location = game_config
             .location
             .as_ref()
@@ -409,6 +414,9 @@ impl REvilThings for REvilManager {
         let results: Vec<ResultManagerErr<()>> = selected_assets
             .iter()
             .map(|asset| -> ResultManagerErr<()> {
+                // TODO add check if there was error for selected_assets during unzip or download
+                // for particular asset as data saved later would be invalid maybe selected_assets should have additional field
+                // like error with error type in there
                 info!("After unzip work - start");
                 // for TDB assets STANDARD_TYPE_QUALIFIER is used and for rest games included nextgens ".zip"
                 let game_short_name = get_game_short_name_from_asset(&asset)?;
@@ -483,7 +491,7 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    fn ask_for_switch_type_decision(&mut self) -> ResultManagerErr<&mut Self> {
+    fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self> {
         let what_next = self
             .dialogs
             .ask_for_switch_type_decision(&mut self.config, &mut self.state)
@@ -505,13 +513,53 @@ impl REvilThings for REvilManager {
                 self.save_config()?;
                 if cfg!(target_os = "windows") {
                     Command::new(path)
-                        .args(["-r", "no", "--one", &short_name])
+                        .args(["-r", &format!("{:?}", run_after), "--one", &short_name])
                         .spawn()
                         .expect("failed to execute process");
                     process::exit(0);
                 };
             }
             Early => {
+                return Ok(self);
+            }
+        }
+        Ok(self)
+    }
+
+    fn load_from_cache_if_chosen(&mut self) -> ResultManagerErr<&mut Self> {
+        use LabelOptions::*;
+        let selected_option = self.state.selected_option.as_ref();
+        if selected_option.is_none()
+            || selected_option.is_some()
+                && selected_option.unwrap() != &LoadDifferentVersionFromCache
+        {
+            return Ok(self);
+        }
+        let option = self.dialogs.ask_for_local_cache_options(&mut self.config);
+        debug!("Ask for cache return option {:#?}", option);
+        match option {
+            LoadFromCache(short_name, asset_name, version) => {
+                debug!(
+                    "short_name- {} asset_name- {} version-{}",
+                    short_name, asset_name, version
+                );
+                // TODO set nextgen accordingly to new from zip archive
+                // TODO Maybe consider using after_unzip_work function but remember to add this to selected_assets
+                // TODO consider the same for ask_for_switch_type_decision to use after_unzip_work function it will be safer that way
+                self.unzip_update::<fn(&OsStr) -> bool>(
+                    &short_name,
+                    &asset_name,
+                    Some(&version),
+                    None,
+                )?;
+                match self.config.games.get_mut(&short_name) {
+                    Some(game_config) => game_config.version_in_use = Some(version.to_string()),
+                    None => (),
+                };
+                self.state.selected_game_to_launch =
+                    Some(get_steam_id_by_short_name(&self.config.games, &short_name).to_string());
+            }
+            _ => {
                 return Ok(self);
             }
         }
@@ -739,6 +787,7 @@ fn add_asset_ver_to_game_conf_ver(
     version: &str,
     asset: &ReleaseAsset,
 ) {
+    debug!("Adding asset {}", &asset.name);
     game_config
         .versions
         .as_mut()
@@ -752,13 +801,16 @@ fn add_asset_ver_to_game_conf_ver(
                         first_set[1].to_string(),
                     ]
                     .to_vec();
+                    debug!(
+                        "switch has one or more assets. Assets len {}",
+                        first_set.len() - 1
+                    );
                     versions.remove(0);
-                    debug!("switch more than 1 asset {}", asset.name);
                     versions.insert(0, vecc);
                 } else {
+                    debug!("switch has no assets");
                     versions.remove(0);
                     versions.insert(0, [version.to_string(), asset.name.to_string()].to_vec());
-                    debug!("switch less than 1 asset {}", asset.name);
                 }
             } else {
                 debug!("no switch asset {}", asset.name);
@@ -769,6 +821,7 @@ fn add_asset_ver_to_game_conf_ver(
             game_config.versions =
                 Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec())
         });
+    game_config.version_in_use = Some(version.to_string());
 }
 
 fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> {
@@ -825,6 +878,15 @@ where
 
     unzip::unzip(file, destination, Some(closure)).change_context(REvilManagerError::UnzipError)?;
     Ok(())
+}
+
+fn get_steam_id_by_short_name<'a>(
+    games: &'a HashMap<ShortGameName, GameConfig>,
+    game_short_name: &'a String,
+) -> &'a String {
+    let game_config = games.get(game_short_name).unwrap();
+    let steam_id = game_config.steamId.as_ref().unwrap();
+    steam_id
 }
 // #[test]
 // fn sort_test {

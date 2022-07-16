@@ -3,9 +3,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::rManager::rManager_header::REvilManagerError;
+use crate::utils::get_local_path_to_cache::get_local_path_to_cache_folder;
 
 use error_stack::{IntoReport, Report, ResultExt};
-
 
 use log::debug;
 
@@ -29,11 +29,9 @@ pub fn cleanup_cache(
         return Ok(());
     }
     let last_ver_nb = &last_ver[0];
-    let cache_dir = manager
-        .get_local_path_to_cache(Some(&last_ver_nb))
-        .or(Err(Report::new(
-            REvilManagerError::ReleaseManagerIsNotInitialized,
-        )))?;
+    let cache_dir = get_local_path_to_cache_folder(None, Some(&last_ver_nb)).or(Err(Report::new(
+        REvilManagerError::ReleaseManagerIsNotInitialized,
+    )))?;
     Ok(if cache_dir.exists() {
         let file_to_remove = cache_dir.join(last_ver[1].to_string());
         if Path::new(&file_to_remove).exists() {

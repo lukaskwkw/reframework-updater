@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, create_TDB_string};
+use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER};
 use error_stack::{IntoReport, Result, ResultExt};
 use log::{debug, warn};
 
@@ -22,6 +22,10 @@ pub struct LocalGameConfig {
 
 pub trait LocalFiles {
     fn get_local_report_for_game(&self, game_path: &str, game_short_name: &str) -> LocalGameConfig;
+}
+
+pub fn create_tdb_string(game_short_name: &str) -> String {
+    format!("{}{}", game_short_name, STANDARD_TYPE_QUALIFIER)
 }
 
 #[derive(Debug)]
@@ -51,7 +55,7 @@ fn map_to_nextgen(path: impl AsRef<Path>, game_short_name: &str) -> Option<bool>
     let dinput8_path = path.as_ref().join("dinput8.dll");
 
     if GAMES_NEXTGEN_SUPPORT.contains(&game_short_name) {
-        let text = create_TDB_string(game_short_name);
+        let text = create_tdb_string(game_short_name);
         let is_standard_edition = match find_string_in_binary_file(&dinput8_path, &text) {
             Ok(it) => it,
             Err(err) => {

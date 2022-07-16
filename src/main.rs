@@ -17,6 +17,7 @@ pub mod reframework_github {
     pub mod release;
 }
 mod utils {
+    pub mod get_local_path_to_cache;
     pub mod binSearch;
     pub mod fetch;
     pub mod init_logger;
@@ -77,17 +78,13 @@ static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
 
 static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 3;
 
-pub fn create_TDB_string(game_short_name: &str) -> String {
-    format!("{}{}", game_short_name, STANDARD_TYPE_QUALIFIER)
-}
-
 // #[tokio::main]
 fn main() -> Result<(), Box<dyn error::Error>> {
     let config_provider = Box::new(REvilConfigProvider::new("config.toml"));
     let steam_menago = Box::new(SteamManager);
     let local_provider = Box::new(LocalProvider);
     let dialogs = Box::new(Dialogs);
-    let mut evilManager = REvilManager::new(
+    let mut evil_manager = REvilManager::new(
         config_provider,
         local_provider,
         steam_menago,
@@ -95,9 +92,11 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         REFRGithub::new,
     );
 
-    let strategy = StrategyFactory::get_strategy(&mut evilManager);
-    strategy(&mut evilManager);
-    // let secs = time::Duration::from_secs(20);
-    // thread::sleep(secs);
+    let strategy = StrategyFactory::get_strategy(&mut evil_manager);
+    strategy(&mut evil_manager);
+    let secs = time::Duration::from_secs(7);
+    thread::sleep(secs);
     Ok(())
 }
+// TODO implement back functionality
+// TODO implement not run game after any switching option

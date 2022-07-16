@@ -1,3 +1,6 @@
+type Version = String;
+type AssetName = String;
+
 #[derive(Debug, Default, PartialEq)]
 pub enum LabelOptions {
     SwitchType,
@@ -5,6 +8,7 @@ pub enum LabelOptions {
     SwitchToNextgen(String),
     SwitchRuntime,
     LoadDifferentVersionFromCache,
+    LoadFromCache(ShortGameName, AssetName, Version),
     Skip,
     Exit,
     UpdateAllGames,
@@ -14,67 +18,85 @@ pub enum LabelOptions {
     #[default]
     Other,
 }
+use LabelOptions::*;
 
+use crate::tomlConf::configStruct::ShortGameName;
 pub static SWITCH_RUNTIME_PART: &str = "Switch runtime to";
 
 impl From<&str> for LabelOptions {
     fn from(text: &str) -> Self {
         match text {
-            "Switch type..." => LabelOptions::SwitchType,
-            "Load from cache..." => LabelOptions::LoadDifferentVersionFromCache,
-            "Skip" => LabelOptions::Skip,
-            "Exit" => LabelOptions::Exit,
-            "Update all games" => LabelOptions::UpdateAllGames,
-            "Update all games - prefer standard" => LabelOptions::UpdateAllGamesPreferStandard,
-            "Update all games - prefer nextgen" => LabelOptions::UpdateAllGamesPreferNextgen,
-            "Update all games - autodetect" => LabelOptions::UpdateAllGamesAutoDetect,
+            "Switch type..." => SwitchType,
+            "Load from cache..." => LoadDifferentVersionFromCache,
+            "Skip" => Skip,
+            "Exit" => Exit,
+            "Update all games" => UpdateAllGames,
+            "Update all games - prefer standard" => UpdateAllGamesPreferStandard,
+            "Update all games - prefer nextgen" => UpdateAllGamesPreferNextgen,
+            "Update all games - autodetect" => UpdateAllGamesAutoDetect,
             label => {
-                let option = label
-                    .contains("Switch type to |")
-                    .then(|| {
-                        let game_type = label.split('|').collect::<Vec<&str>>()[1];
-                        label.split_once(" - ").map(|(_, short_name)| {
-                            if game_type == "standard" {
-                                LabelOptions::SwitchToStandard(short_name.to_string())
-                            } else {
-                                LabelOptions::SwitchToNextgen(short_name.to_string())
-                            }
-                        })
-                    })
-                    .unwrap_or(
-                        label
-                            .contains(SWITCH_RUNTIME_PART)
-                            .then_some(LabelOptions::SwitchRuntime),
-                    )
-                    .unwrap_or(LabelOptions::Other);
+                let option = deduct_switch_to(label)
+                    .or(deduct_load_from_cache(label))
+                    .or(label.contains(SWITCH_RUNTIME_PART).then_some(SwitchRuntime))
+                    .unwrap_or(Other);
                 option
             }
         }
     }
 }
 
+fn deduct_load_from_cache(label: &str) -> Option<LabelOptions> {
+    label
+        .contains("from cache")
+        .then(|| match label.splitn(4,'|').collect::<Vec<&str>>()[..] {
+            [_, short_name, asset_name, version] => LoadFromCache(
+                short_name.to_string(),
+                asset_name.to_string(),
+                version.to_string(),
+            ),
+            _ => Other,
+        })
+}
+
+fn deduct_switch_to(label: &str) -> Option<LabelOptions> {
+    label
+        .contains("Switch type to |")
+        .then(|| {
+            let (_, game_type) = label.split_once('|')?;
+            label.split_once(" - ").map(|(_, short_name)| {
+                if game_type == "standard" {
+                    SwitchToStandard(short_name.to_string())
+                } else {
+                    SwitchToNextgen(short_name.to_string())
+                }
+            })
+        })
+        .unwrap_or(None)
+}
+
 impl LabelOptions {
     pub fn to_label(&self) -> String {
         match self {
-            LabelOptions::SwitchType => "Switch type...".to_string(),
-            LabelOptions::LoadDifferentVersionFromCache => "Load from cache...".to_string(),
-            LabelOptions::Skip => "Skip".to_string(),
-            LabelOptions::Exit => "Exit".to_string(),
-            LabelOptions::UpdateAllGames => "Update all games".to_string(),
-            LabelOptions::UpdateAllGamesPreferStandard => {
-                "Update all games - prefer standard".to_string()
-            }
-            LabelOptions::UpdateAllGamesPreferNextgen => {
-                "Update all games - prefer nextgen".to_string()
-            }
-            LabelOptions::UpdateAllGamesAutoDetect => "Update all games - autodetect".to_string(),
-            LabelOptions::SwitchToStandard(game_short_name) => {
+            SwitchType => "Switch type...".to_string(),
+            LoadDifferentVersionFromCache => "Load from cache...".to_string(),
+            Skip => "Skip".to_string(),
+            Exit => "Exit".to_string(),
+            UpdateAllGames => "Update all games".to_string(),
+            UpdateAllGamesPreferStandard => "Update all games - prefer standard".to_string(),
+            UpdateAllGamesPreferNextgen => "Update all games - prefer nextgen".to_string(),
+            UpdateAllGamesAutoDetect => "Update all games - autodetect".to_string(),
+            SwitchToStandard(game_short_name) => {
                 format!("Switch type to |standard| - {}", game_short_name)
             }
-            LabelOptions::SwitchToNextgen(game_short_name) => {
+            SwitchToNextgen(game_short_name) => {
                 format!("Switch type to |nextgen| - {}", game_short_name)
             }
-            other => format!("{:?}", other),
+            SwitchRuntime => "SwitchRuntime".to_string(),
+            LoadFromCache(short_name, asset_name, version) => format!(
+                "Load mod from cache |{}|{}|{}",
+                short_name, asset_name, version
+            ),
+            Other => "Other".to_string(),
         }
     }
 }

@@ -41,6 +41,7 @@ mod tests {
                 let mut games_test = HashMap::new();
                 // for key in ["RE2", "RE7", "RE12"] {
                 let game = GameConfig {
+                    version_in_use: None,
                     steamId: None,
                     location: Some("D:/steam/games/RE2".to_owned()),
                     nextgen: Some(true),
@@ -51,6 +52,7 @@ mod tests {
                 games_test.insert("RE2".to_owned(), game);
 
                 let game = GameConfig {
+                    version_in_use: None,
                     location: Some("D:/steam/games/RE7".to_owned()),
                     nextgen: None,
                     runArgs: None,
@@ -61,6 +63,7 @@ mod tests {
                 games_test.insert("RE7".to_owned(), game);
 
                 let game = GameConfig {
+                    version_in_use: None,
                     location: Some("D:/steam/games/RE12".to_owned()),
                     nextgen: None,
                     runArgs: None,
@@ -88,6 +91,7 @@ mod tests {
         let mut games_test = HashMap::new();
 
         let game = GameConfig {
+            version_in_use: None,
             steamId: None,
             location: Some("D:/steam/games/RE2".to_owned()),
             nextgen: Some(true),
@@ -98,6 +102,7 @@ mod tests {
         games_test.insert("RE2".to_owned(), game);
 
         let game = GameConfig {
+            version_in_use: None,
             steamId: None,
             location: Some("D:/steam/games/RE7".to_owned()),
             nextgen: None,
@@ -108,6 +113,7 @@ mod tests {
         games_test.insert("RE7".to_owned(), game);
 
         let game = GameConfig {
+            version_in_use: None,
             steamId: None,
             location: Some("D:/steam/games/RE12".to_owned()),
             nextgen: None,

@@ -2,7 +2,7 @@ use std::{collections::HashMap, env, error::Error, path::PathBuf};
 
 use dialoguer::{theme::ColorfulTheme, Select};
 use error_stack::{Report, Result, ResultExt};
-use log::{debug, info};
+use log::{debug, info, warn};
 use self_update::update::ReleaseAsset;
 
 use crate::{
@@ -12,7 +12,10 @@ use crate::{
         REvilManager, REvilManagerError, REvilManagerState, ResultManagerErr, SORT_DETERMINER,
     },
     tomlConf::configStruct::{REvilConfig, ShortGameName, SteamId},
-    utils::{find_game_conf_by_steam_id::find_game_conf_by_steam_id, is_asset_tdb::is_asset_tdb},
+    utils::{
+        find_game_conf_by_steam_id::find_game_conf_by_steam_id,
+        get_local_path_to_cache::get_local_path_to_cache_folder, is_asset_tdb::is_asset_tdb,
+    },
     STANDARD_TYPE_QUALIFIER,
 };
 
@@ -46,6 +49,7 @@ pub trait Ask {
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
     ) -> ResultDialogsErr<()>;
+    fn ask_for_local_cache_options(&mut self, config: &mut REvilConfig) -> LabelOptions;
     fn ask_for_switch_type_decision(
         &mut self,
         config: &mut REvilConfig,
@@ -65,89 +69,7 @@ pub enum SwitchActionReport {
     SaveAndRunThenExit(ShortGameName, PathBuf),
     Early,
 }
-
-impl Dialogs {
-    fn prepare_decision_report(
-        &self,
-        config: &REvilConfig,
-        state: &mut REvilManagerState,
-        report: &HashMap<String, Vec<ReleaseAsset>>,
-    ) -> ResultManagerErr<(
-        bool,
-        bool,
-        HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>,
-    )> {
-        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like
-        // MHRISE DMC5 then it should not change thus should not display specific message later
-        let mut different_found = false;
-        // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
-        let mut any_none = false;
-        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> =
-            HashMap::new();
-
-        // TODO next-time be careful with those combinators
-        report.iter().for_each(|(game_short_name, assets)| {
-            state
-                .games_that_require_update
-                .contains(game_short_name)
-                .then(|| {
-                    assets.iter().for_each(|asset| {
-                        let mut text = "".to_string();
-                        let mut include_for_all_option = Some(true);
-                        let game_config = config.games.get(game_short_name).unwrap();
-                        is_asset_tdb(game_short_name, asset)
-                            .and_then(|does| {
-                                different_found = true;
-                                let nextgen = game_config.nextgen;
-
-                                does.then(|| {
-                                    text = format!("{} Standard version", game_short_name);
-                                    nextgen.and_then(|nextgen| {
-                                        nextgen.then(|| {
-                                            include_for_all_option = Some(false);
-                                            get_label_for_download_switch(
-                                                &mut text, "nextgen", "standard",
-                                            );
-                                        })
-                                    })
-                                })
-                                .unwrap_or_else(|| {
-                                    text = format!("{} Nextgen version", game_short_name);
-                                    nextgen.map(|next_gen| {
-                                        (!next_gen).then(|| {
-                                            include_for_all_option = Some(false);
-                                            get_label_for_download_switch(
-                                                &mut text, "standard", "nextgen",
-                                            );
-                                        });
-                                    })
-                                })
-                                .unwrap_or_else(|| {
-                                    if nextgen.is_none() {
-                                        debug!("None for {}, {}", game_short_name, asset.name);
-                                        include_for_all_option = None;
-                                        any_none = true;
-                                    }
-                                });
-                                return Some(());
-                            })
-                            .unwrap_or_else(|| text = game_short_name.to_string());
-                        games.insert(
-                            text,
-                            (
-                                asset.clone(),
-                                include_for_all_option,
-                                game_config.steamId.clone(),
-                            ),
-                        );
-                    });
-                })
-                .unwrap_or_default();
-        });
-        Ok((different_found, any_none, games))
-    }
-}
-
+use LabelOptions::*;
 impl Ask for Dialogs {
     fn ask_for_decision(
         &mut self,
@@ -159,10 +81,8 @@ impl Ask for Dialogs {
             .prepare_decision_report(config, state, report)
             .change_context(DialogsErrors::Other)?;
         let mut selections = vec![];
-        use LabelOptions::*;
         if games.len() > 0 {
             selections.push(UpdateAllGames.to_label());
-            // TODO when some game has nextgen as false it thins like it is none I've added sterix next to any_none does it fix it ?
             if *different_found && !*any_none {
                 // will choose base of your current local mod settings per game
                 selections[0] = UpdateAllGamesAutoDetect.to_label();
@@ -187,7 +107,7 @@ impl Ask for Dialogs {
              can support both types Nextgen/Standard don't have mod installed yet.
              Chose which mod type use for them. For other games program will use correct version.";
         }
-        selections.push("Skip".to_string());
+        selections.push(Skip.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text))
             .default(0)
@@ -290,7 +210,6 @@ impl Ask for Dialogs {
                 game.steamId.as_ref().unwrap(),
             );
         });
-        use LabelOptions::*;
         let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(LoadDifferentVersionFromCache.to_label());
@@ -313,6 +232,10 @@ impl Ask for Dialogs {
             }
             SwitchType => {
                 state.selected_option = Some(SwitchType);
+                return Ok(());
+            }
+            LoadDifferentVersionFromCache => {
+                state.selected_option = Some(LoadDifferentVersionFromCache);
                 return Ok(());
             }
             _ => (),
@@ -345,13 +268,69 @@ impl Ask for Dialogs {
         Ok(())
     }
 
+    fn ask_for_local_cache_options(&mut self, config: &mut REvilConfig) -> LabelOptions {
+        let mut selections: Vec<String> = Vec::new();
+        config.games.iter().for_each(|(short_name, game_config)| {
+            let versions = game_config.versions.as_ref().unwrap();
+            for ver_set in versions.iter() {
+                if ver_set.len() < 2 {
+                    return;
+                }
+                let ver = ver_set.first().unwrap();
+                let mut label_appendix: String = "".to_string();
+                if game_config
+                    .version_in_use
+                    .as_ref()
+                    .map(|ver_in_use| ver_in_use == ver)
+                    .unwrap_or_default()
+                {
+                    label_appendix = format!("{SORT_DETERMINER} this is your current version");
+                }
+                ver_set.iter().skip(1).for_each(|asset_name| {
+                    match get_local_path_to_cache_folder(None, Some(ver)) {
+                        Ok(folder) => {
+                            if !folder.join(asset_name).exists() {
+                                return;
+                            }
+                        }
+                        Err(err) => {
+                            warn!("{}", err);
+                            debug!("{:#?}", err);
+                            return;
+                        }
+                    };
+                    let label = LoadFromCache(
+                        short_name.to_string(),
+                        asset_name.to_string(),
+                        ver.to_string(),
+                    )
+                    .to_label();
+                    let label = format!("{} - {}", label_appendix, label);
+                    selections.push(label);
+                })
+            }
+        });
+        selections.sort_by(|a, b| REvilManager::sort(a, b));
+        selections.push(Exit.to_label());
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!(r"Select game and its mod version to switch. 
+                Note TDB = standard version if game supports standard/nextgen 
+                where non TDB = Nextgen version "))
+            .default(0)
+            .items(&selections[..])
+            .interact()
+            .unwrap();
+        let selected_text = &selections[selection];
+
+        LabelOptions::from(&selected_text[..])
+    }
+
     fn ask_for_switch_type_decision(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
     ) -> ResultDialogsErr<SwitchActionReport> {
         let selected_option = state.selected_option.as_ref();
-        use LabelOptions::*;
         use SwitchActionReport::*;
         if selected_option.is_none()
             || selected_option.is_some() && selected_option.unwrap() != &SwitchType
@@ -413,7 +392,7 @@ impl Ask for Dialogs {
                         .unwrap_or(&"dupa".to_string())
                         .clone();
 
-                    // I didn't know how to solve borrow checker issue so if there is no second cache asset then it's called "dupa"
+                    // I didn't know how to solve a borrow checker issue so if second cache asset doesn't exist then assign "dupa" as asset name
                     if second_asset_name != "dupa" {
                         debug!("preparing unzip for {}", second_asset_name);
                         // TODO if asset from cache is missing then it will panic maybe make it to download asset instead?
@@ -439,6 +418,88 @@ impl Ask for Dialogs {
             _ => (),
         };
         Ok(Early)
+    }
+}
+
+impl Dialogs {
+    fn prepare_decision_report(
+        &self,
+        config: &REvilConfig,
+        state: &mut REvilManagerState,
+        report: &HashMap<String, Vec<ReleaseAsset>>,
+    ) -> ResultManagerErr<(
+        bool,
+        bool,
+        HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>,
+    )> {
+        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like
+        // MHRISE DMC5 then it should not change thus should not display specific message later
+        let mut different_found = false;
+        // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
+        let mut any_none = false;
+        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> =
+            HashMap::new();
+
+        // TODO next-time be careful with those combinators
+        report.iter().for_each(|(game_short_name, assets)| {
+            state
+                .games_that_require_update
+                .contains(game_short_name)
+                .then(|| {
+                    assets.iter().for_each(|asset| {
+                        let mut text = "".to_string();
+                        let mut include_for_all_option = Some(true);
+                        let game_config = config.games.get(game_short_name).unwrap();
+                        is_asset_tdb(game_short_name, asset)
+                            .and_then(|does| {
+                                different_found = true;
+                                let nextgen = game_config.nextgen;
+
+                                does.then(|| {
+                                    text = format!("{} Standard version", game_short_name);
+                                    nextgen.and_then(|nextgen| {
+                                        nextgen.then(|| {
+                                            include_for_all_option = Some(false);
+                                            get_label_for_download_switch(
+                                                &mut text, "nextgen", "standard",
+                                            );
+                                        })
+                                    })
+                                })
+                                .unwrap_or_else(|| {
+                                    text = format!("{} Nextgen version", game_short_name);
+                                    nextgen.map(|next_gen| {
+                                        (!next_gen).then(|| {
+                                            include_for_all_option = Some(false);
+                                            get_label_for_download_switch(
+                                                &mut text, "standard", "nextgen",
+                                            );
+                                        });
+                                    })
+                                })
+                                .unwrap_or_else(|| {
+                                    if nextgen.is_none() {
+                                        debug!("None for {}, {}", game_short_name, asset.name);
+                                        include_for_all_option = None;
+                                        any_none = true;
+                                    }
+                                });
+                                return Some(());
+                            })
+                            .unwrap_or_else(|| text = game_short_name.to_string());
+                        games.insert(
+                            text,
+                            (
+                                asset.clone(),
+                                include_for_all_option,
+                                game_config.steamId.clone(),
+                            ),
+                        );
+                    });
+                })
+                .unwrap_or_default();
+        });
+        Ok((different_found, any_none, games))
     }
 }
 

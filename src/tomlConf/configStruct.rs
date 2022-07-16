@@ -66,6 +66,7 @@ pub struct GameConfig {
     pub location: Option<String>,
     pub steamId: Option<SteamId>,
     pub versions: Option<Vec<Vec<String>>>,
+    pub version_in_use: Option<String>,
     pub nextgen: Option<bool>,
     pub runtime: Option<Runtime>,
     pub runArgs: Option<String>,
@@ -73,6 +74,7 @@ pub struct GameConfig {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct Main {
+    // TODO maybe implement following -> pub deliberately_ask_for_update_check: Option<bool>,
     pub sources: Option<Vec<String>>,
     pub repo_owner: Option<String>,
     pub chosen_source: Option<String>,
