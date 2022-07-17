@@ -4,9 +4,13 @@ use std::{
     env,
     ffi::OsStr,
     fs,
-    path::Path,
     process::{self, Command},
 };
+
+// #[cfg(not(test))]
+use std::path::Path;
+// #[cfg(test)]
+// use crate::tests::integration::tests::Path;
 
 use crate::{
     args::RunAfter,
@@ -30,8 +34,8 @@ use crate::{
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, init_logger::init_logger,
-        is_asset_tdb::is_asset_tdb, local_version::LocalFiles, mslink::create_ms_lnk,
-        progress_style, version_parser::isRepoVersionNewer,
+        is_asset_tdb::is_asset_tdb, local_version::LocalFiles, progress_style,
+        version_parser::isRepoVersionNewer,
     },
     DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
     STANDARD_TYPE_QUALIFIER,
@@ -52,7 +56,7 @@ impl REvilManager {
         local_provider: Box<dyn LocalFiles>,
         steam_menago: Box<dyn SteamThings>,
         dialogs: Box<dyn Ask>,
-        github_constr: fn(&str, &str) -> REFRGithub,
+        github_constr: fn(&str, &str) -> Box<dyn ManageGithub>,
     ) -> Self {
         Self {
             config: REvilConfig::default(),
@@ -190,6 +194,7 @@ impl REvilThings for REvilManager {
                 ))?;
 
         let ms_links_folder = Path::new("REFR_links");
+        // TODO maybe move it to local_provider as I did with create_ms_lnk
         fs::create_dir_all(&ms_links_folder).map_err(|err| {
             Report::new(REvilManagerError::FailedToCreateMsLink(format!(
                 "Error during create_dir_all path {} Err {}",
@@ -214,7 +219,8 @@ impl REvilThings for REvilManager {
                 }
 
                 let arguments = format!("--one {}", short_name);
-                create_ms_lnk(&ms_link_path, &current_exe_path, Some(arguments.clone()))
+                self.local_provider
+                    .create_ms_lnk(&ms_link_path, &current_exe_path, Some(arguments.clone()))
                     .or_else(|err| {
                         Err(Report::new(REvilManagerError::FailedToCreateMsLink(
                             format!(
@@ -249,7 +255,7 @@ impl REvilThings for REvilManager {
             Some(it) => it.to_string(),
             None => NIGHTLY_RELEASE.to_string(),
         };
-        self.github_release_manager = Some(Box::new((self.refr_ctor)(&repo_owner, &source)));
+        self.github_release_manager = Some((self.refr_ctor)(&repo_owner, &source));
 
         info!("Checking if new release exists");
         let manager = self.github_release_manager.as_mut().ok_or(Report::new(
@@ -312,7 +318,7 @@ impl REvilThings for REvilManager {
                 REvilManagerError::ReleaseManagerIsNotInitialized,
             ))?;
         self.dialogs
-            .ask_for_decision(&mut self.config, &mut self.state, report)
+            .ask_for_decision_and_populate_selected_assets(&mut self.config, &mut self.state, report)
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
@@ -486,7 +492,7 @@ impl REvilThings for REvilManager {
 
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self> {
         self.dialogs
-            .ask_for_game_decision_if_needed(&mut self.config, &mut self.state)
+            .ask_for_game_decision_if_needed_and_set_game_to_launch(&mut self.config, &mut self.state)
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
@@ -494,7 +500,7 @@ impl REvilThings for REvilManager {
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self> {
         let what_next = self
             .dialogs
-            .ask_for_switch_type_decision(&mut self.config, &mut self.state)
+            .get_switch_type_decision(&mut self.config, &mut self.state)
             .change_context(REvilManagerError::Other)?;
 
         use SwitchActionReport::*;
@@ -535,7 +541,7 @@ impl REvilThings for REvilManager {
         {
             return Ok(self);
         }
-        let option = self.dialogs.ask_for_local_cache_options(&mut self.config);
+        let option = self.dialogs.get_selected_cache_option(&mut self.config);
         debug!("Ask for cache return option {:#?}", option);
         match option {
             LoadFromCache(short_name, asset_name, version) => {
@@ -692,7 +698,7 @@ impl REvilManager {
                                 .games_that_require_update
                                 .push(short_name.to_string())
                         })
-                        .unwrap_or(())
+                        .unwrap_or(());
                     });
                 } else {
                     debug!(

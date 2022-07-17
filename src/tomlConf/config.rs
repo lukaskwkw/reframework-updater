@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::{automock};
+
 use error_stack::{IntoReport, Result, ResultExt};
 use std::fs::File;
 use std::io::prelude::*;
@@ -18,6 +21,7 @@ pub struct REvilConfigProvider {
     filename: String,
 }
 
+#[cfg_attr(test, automock)]
 pub trait ConfigProvider {
     fn load_from_file(&self) -> ConfigResult<REvilConfig>;
     fn save_to_file(&self, config: &REvilConfig) -> ConfigResult<()>;

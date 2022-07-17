@@ -15,17 +15,17 @@ mod tests {
 
         [RE2]
         location = "D:/steam/games/RE2"
-        versions = [["1.71-abd314"]]
+        versions = [["v1.71-abd3145"]]
         nextgen = true
         runtime = "OpenXR"
 
         [RE7]
         location = "D:/steam/games/RE7"
-        versions = [["1.71-abd314", "RE7.zip"]]
+        versions = [["v1.71-abd3145", "RE7.zip"]]
 
         [RE12]
         location = "D:/steam/games/RE12"
-        versions = [["1.71-abd314", "RE12_TDB77.zip"]]
+        versions = [["v1.71-abd3145", "RE12_TDB77.zip"]]
         runtime = "OpenVR"
         latawiec = true
     "#;
@@ -47,7 +47,7 @@ mod tests {
                     nextgen: Some(true),
                     runArgs: None,
                     runtime: Some(Runtime::OpenXR),
-                    versions: Some(vec![["1.71-abd314".to_owned()].to_vec()]),
+                    versions: Some(vec![["v1.71-abd3145".to_owned()].to_vec()]),
                 };
                 games_test.insert("RE2".to_owned(), game);
 
@@ -57,7 +57,7 @@ mod tests {
                     nextgen: None,
                     runArgs: None,
                     runtime: None,
-                    versions: Some(vec![["1.71-abd314".to_owned(), "RE7.zip".to_owned()].to_vec()]),
+                    versions: Some(vec![["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()]),
                     steamId: None,
                 };
                 games_test.insert("RE7".to_owned(), game);
@@ -68,7 +68,7 @@ mod tests {
                     nextgen: None,
                     runArgs: None,
                     runtime: Some(Runtime::OpenVR),
-                    versions: Some(vec![["1.71-abd314".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
+                    versions: Some(vec![["v1.71-abd3145".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
                     steamId: None,
                 };
                 games_test.insert("RE12".to_owned(), game);
@@ -97,7 +97,7 @@ mod tests {
             nextgen: Some(true),
             runArgs: None,
             runtime: Some(Runtime::OpenXR),
-            versions: Some(vec![["1.71-abd314".to_owned()].to_vec()]),
+            versions: Some(vec![["v1.71-abd3145".to_owned()].to_vec()]),
         };
         games_test.insert("RE2".to_owned(), game);
 
@@ -108,7 +108,7 @@ mod tests {
             nextgen: None,
             runArgs: None,
             runtime: None,
-            versions: Some(vec![["1.71-abd314".to_owned(), "RE7.zip".to_owned()].to_vec()]),
+            versions: Some(vec![["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()]),
         };
         games_test.insert("RE7".to_owned(), game);
 
@@ -119,7 +119,7 @@ mod tests {
             nextgen: None,
             runArgs: None,
             runtime: Some(Runtime::OpenVR),
-            versions: Some(vec![["1.71-abd314".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
+            versions: Some(vec![["v1.71-abd3145".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
         };
         games_test.insert("RE12".to_owned(), game);
 

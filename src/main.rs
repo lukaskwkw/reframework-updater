@@ -1,5 +1,4 @@
-use args::ArgsClap;
-
+use args::{ArgsClap, parse_args};
 use dialogs::dialogs::Dialogs;
 #[cfg(target_os = "windows")]
 use rManager::rManager_header::REvilManager;
@@ -22,7 +21,6 @@ mod utils {
     pub mod fetch;
     pub mod init_logger;
     pub mod local_version;
-    pub mod mslink;
     pub mod progress_style;
     pub mod version_parser;
     pub mod find_game_conf_by_steam_id;
@@ -38,9 +36,15 @@ pub mod unzip {
     pub mod UnzipError;
     pub mod unzip;
 }
-// mod tests {
-//     pub mod data;
-// }
+#[cfg(test)]
+mod tests {
+    pub mod integration;
+    pub mod config_provider_mock;
+    pub mod steam_mock;
+    pub mod refr_github_mock;
+    pub mod dialog_provider_mock;
+}
+
 pub mod strategy {
     pub mod StrategyFactory;
 }
@@ -80,6 +84,9 @@ static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 3;
 
 // #[tokio::main]
 fn main() -> Result<(), Box<dyn error::Error>> {
+    unsafe {
+        parse_args();
+    };
     let config_provider = Box::new(REvilConfigProvider::new("config.toml"));
     let steam_menago = Box::new(SteamManager);
     let local_provider = Box::new(LocalProvider);

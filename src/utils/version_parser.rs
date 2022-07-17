@@ -1,16 +1,21 @@
-use log::debug;
+use std::num::ParseIntError;
 
-const VERSION_DELIMETER: char = '.';
-const HASH_DELIMETERE: char = '-';
+use log::{debug, error, warn};
 
-fn get_version_tuple(text: &str) -> Option<(&str, &str, &str)> {
-    let (major, minor_a_hash) = text[1..].split_once(VERSION_DELIMETER)?;
-    let (minor, hash) = minor_a_hash.split_once(HASH_DELIMETERE)?;
+const VERSION_DELIMITER: char = '.';
+const HASH_DELIMITER: char = '-';
+
+fn get_version_tuple(repo: &str) -> Option<(&str, &str, &str)> {
+    let (major, minor_a_hash) = repo[1..].split_once(VERSION_DELIMITER)?;
+    let (minor, hash) = minor_a_hash.split_once(HASH_DELIMITER)?;
     Some((major, minor, hash))
 }
 
 pub fn isRepoVersionNewer(local: &str, repo: &str) -> Option<bool> {
-    let repo_version = get_version_tuple(repo)?;
+    let repo_version = get_version_tuple(repo).or_else(|| {
+        warn!("Repo version parser error: {}", repo);
+        None
+    })?;
     let local_version: (&str, &str, &str) = match local.contains('.') {
         false => {
             debug!("Local version has only hash");
@@ -23,11 +28,22 @@ pub fn isRepoVersionNewer(local: &str, repo: &str) -> Option<bool> {
         }
         true => get_version_tuple(local)?,
     };
+    debug!("{:?}", local_version);
+    debug!("{:?}", repo_version);
 
-    if repo_version.0.parse::<u8>().ok()? > local_version.0.parse().ok()? {
+    let map_err = |err: ParseIntError| -> ParseIntError {
+        warn!("{:?}", err);
+        err
+    };
+
+    if repo_version.0.parse::<u16>().map_err(map_err).ok()?
+        > local_version.0.parse::<u16>().map_err(map_err).ok()?
+    {
         debug!("Major is greater");
         Some(true)
-    } else if repo_version.1.parse::<u8>().ok()? > local_version.1.parse().ok()? {
+    } else if repo_version.1.parse::<u16>().map_err(map_err).ok()?
+        > local_version.1.parse::<u16>().map_err(map_err).ok()?
+    {
         debug!("Minor is greater");
         Some(true)
     } else if repo_version.2 != local_version.2 {

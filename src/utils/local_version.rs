@@ -1,10 +1,14 @@
+#[cfg(test)]
+use mockall::{automock};
+use mslnk::ShellLink;
+
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
-use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER};
+use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER, DynResult};
 use error_stack::{IntoReport, Result, ResultExt};
 use log::{debug, warn};
 
@@ -20,8 +24,10 @@ pub struct LocalGameConfig {
     pub nextgen: Option<bool>,
 }
 
+#[cfg_attr(test, automock)]
 pub trait LocalFiles {
     fn get_local_report_for_game(&self, game_path: &str, game_short_name: &str) -> LocalGameConfig;
+    fn create_ms_lnk(&self, lnk_name: &PathBuf, target: &PathBuf, arguments: Option<String>) -> DynResult<()>;
 }
 
 pub fn create_tdb_string(game_short_name: &str) -> String {
@@ -48,6 +54,12 @@ impl LocalFiles for LocalProvider {
             version: map_to_version(game_path),
             nextgen: map_to_nextgen(game_path, game_short_name),
         }
+    }
+    fn create_ms_lnk(&self, lnk_name: &PathBuf, target: &PathBuf, arguments: Option<String>) -> DynResult<()> {
+        let mut sl = ShellLink::new(target)?;
+        sl.set_arguments(arguments);
+        sl.create_lnk(lnk_name)?;
+        Ok(()) 
     }
 }
 
