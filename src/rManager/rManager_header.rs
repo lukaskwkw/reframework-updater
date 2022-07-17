@@ -29,7 +29,7 @@ pub struct REvilManager {
     pub local_provider: Box<dyn LocalFiles>,
     pub dialogs: Box<dyn Ask>,
     pub github_release_manager: Option<Box<dyn ManageGithub>>,
-    pub refr_ctor: fn(&str, &str) -> REFRGithub,
+    pub refr_ctor: fn(&str, &str) -> Box<dyn ManageGithub>,
     pub state: REvilManagerState,
 }
 

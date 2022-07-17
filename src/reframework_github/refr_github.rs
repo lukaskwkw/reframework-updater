@@ -1,13 +1,16 @@
+#[cfg(test)]
+use mockall::automock;
+
 use core::fmt;
 use std::{
     collections::HashMap,
     error::Error,
     fmt::{Display, Formatter},
     fs,
-    path::{PathBuf},
+    path::PathBuf,
 };
 
-use error_stack::{IntoReport};
+use error_stack::IntoReport;
 use log::{info, trace};
 use reqwest::header;
 use self_update::{
@@ -15,11 +18,12 @@ use self_update::{
     Download,
 };
 
-use crate::{utils::{fetch::fetch_release_api, get_local_path_to_cache::get_local_path_to_cache_folder}, DynResult, GAMES_NEXTGEN_SUPPORT};
+use crate::{
+    utils::{fetch::fetch_release_api, get_local_path_to_cache::get_local_path_to_cache_folder},
+    DynResult, GAMES_NEXTGEN_SUPPORT,
+};
 
-
-
-type GameShortName = String;
+pub type GameShortName = String;
 
 #[derive(Clone, Debug, Default)]
 pub struct REFRGithub {
@@ -31,7 +35,7 @@ pub struct REFRGithub {
 
 #[derive(Debug)]
 pub enum REFRGithubError {
-    VersionIsNoneAndReleaseIsNone
+    VersionIsNoneAndReleaseIsNone,
 }
 
 impl Display for REFRGithubError {
@@ -49,7 +53,6 @@ pub trait ManageGithub<T = REFRGithub> {
     fn generate_assets_report(&mut self) -> DynResult<()>;
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&T>;
     fn fetch_release(&self) -> DynResult<Release>;
-    // fn filter_ou(&self) -> DynResult<Release>;
     fn getRelease(&self) -> Option<&Release>;
     fn getAssetsReport(&self) -> &HashMap<GameShortName, Vec<ReleaseAsset>>;
 }
@@ -75,7 +78,6 @@ impl ManageGithub for REFRGithub {
                     .entry(it.to_string())
                     .and_modify(|assets| assets.push(asset.clone()))
                     .or_insert([asset.clone()].to_vec());
-                
             } else {
                 let short_name = asset.name.split('.').collect::<Vec<&str>>();
                 let short_name = short_name.first().ok_or(format!(
@@ -91,6 +93,7 @@ impl ManageGithub for REFRGithub {
         Ok(())
     }
 
+    // TODO return value should be changed to just DynResult<()> as there is no need to return Self. It makes testing complicated
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&Self> {
         let mut download = Download::from_url(&release_asset.download_url);
         let mut headers = header::HeaderMap::new();
@@ -99,19 +102,23 @@ impl ManageGithub for REFRGithub {
 
         download.show_progress(true);
         let folders = get_local_path_to_cache_folder(self.release.as_ref(), None)?;
-        fs::create_dir_all(&folders).map_err(|err| format!(
+        fs::create_dir_all(&folders).map_err(|err| {
+            format!(
                 "Error during create_dir_all path {} Err {}",
                 folders.display(),
                 err
-            ))?;
+            )
+        })?;
 
         let path = &folders.join(&release_asset.name);
         info!("Downloading {} to {}", release_asset.name, path.display());
-        let mut tmp_archive = fs::File::create(&path).map_err(|err| format!(
+        let mut tmp_archive = fs::File::create(&path).map_err(|err| {
+            format!(
                 "Error during File::create. path {} Err {}",
                 path.display(),
                 err
-            ))?;
+            )
+        })?;
 
         download.download_to(&mut tmp_archive)?;
         Ok(self)
@@ -135,13 +142,14 @@ impl ManageGithub for REFRGithub {
     }
 }
 
+#[cfg_attr(test, automock)]
 impl REFRGithub {
-    pub fn new(repo_owner: &str, repo_name: &str) -> Self {
-        REFRGithub {
+    pub fn new(repo_owner: &str, repo_name: &str) -> Box<dyn ManageGithub> {
+        Box::new(REFRGithub {
             repo_owner: repo_owner.to_owned(),
             repo_name: repo_name.to_owned(),
             release: None,
             report: HashMap::new(),
-        }
+        })
     }
 }

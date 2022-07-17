@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::automock;
+
 use std::{collections::HashMap, env, error::Error, path::PathBuf};
 
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -37,20 +40,21 @@ impl Error for DialogsErrors {}
 
 type ResultDialogsErr<T> = Result<T, DialogsErrors>;
 
+#[cfg_attr(test, automock)]
 pub trait Ask {
-    fn ask_for_decision(
+    fn ask_for_decision_and_populate_selected_assets(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
         report: &HashMap<String, Vec<ReleaseAsset>>,
     ) -> ResultDialogsErr<()>;
-    fn ask_for_game_decision_if_needed(
+    fn ask_for_game_decision_if_needed_and_set_game_to_launch(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
     ) -> ResultDialogsErr<()>;
-    fn ask_for_local_cache_options(&mut self, config: &mut REvilConfig) -> LabelOptions;
-    fn ask_for_switch_type_decision(
+    fn get_selected_cache_option(&mut self, config: &mut REvilConfig) -> LabelOptions;
+    fn get_switch_type_decision(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
@@ -71,7 +75,7 @@ pub enum SwitchActionReport {
 }
 use LabelOptions::*;
 impl Ask for Dialogs {
-    fn ask_for_decision(
+    fn ask_for_decision_and_populate_selected_assets(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
@@ -171,7 +175,7 @@ impl Ask for Dialogs {
         Ok(())
     }
 
-    fn ask_for_game_decision_if_needed(
+    fn ask_for_game_decision_if_needed_and_set_game_to_launch(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
@@ -205,6 +209,7 @@ impl Ask for Dialogs {
                 format!(
                     "Run {} - Runtime <{:?}>",
                     short_name,
+                    // TODO for games that don't have mod unpacked this panic! Fix it as well one above
                     game.runtime.as_ref().unwrap()
                 ),
                 game.steamId.as_ref().unwrap(),
@@ -268,7 +273,7 @@ impl Ask for Dialogs {
         Ok(())
     }
 
-    fn ask_for_local_cache_options(&mut self, config: &mut REvilConfig) -> LabelOptions {
+    fn get_selected_cache_option(&mut self, config: &mut REvilConfig) -> LabelOptions {
         let mut selections: Vec<String> = Vec::new();
         config.games.iter().for_each(|(short_name, game_config)| {
             let versions = game_config.versions.as_ref().unwrap();
@@ -313,9 +318,11 @@ impl Ask for Dialogs {
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(Exit.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(r"Select game and its mod version to switch. 
+            .with_prompt(format!(
+                r"Select game and its mod version to switch. 
                 Note TDB = standard version if game supports standard/nextgen 
-                where non TDB = Nextgen version "))
+                where non TDB = Nextgen version "
+            ))
             .default(0)
             .items(&selections[..])
             .interact()
@@ -325,7 +332,7 @@ impl Ask for Dialogs {
         LabelOptions::from(&selected_text[..])
     }
 
-    fn ask_for_switch_type_decision(
+    fn get_switch_type_decision(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,

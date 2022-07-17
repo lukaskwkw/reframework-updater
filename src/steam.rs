@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::{automock, mock, predicate::*};
+
 use core::fmt;
 use error_stack::{IntoReport, Result, ResultExt};
 use game_scanner::{manager, prelude::Game, steam};
@@ -7,12 +10,14 @@ use std::{
     path::PathBuf,
 };
 
+use crate::tomlConf::configStruct::SteamId;
+
 pub struct SteamManager;
 #[derive(Debug, Default)]
 pub enum SteamError {
     #[default]
     other,
-    GameNotFoundById(String)
+    GameNotFoundById(String),
 }
 impl Display for SteamError {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
@@ -24,36 +29,46 @@ type SteamResult<T> = Result<T, SteamError>;
 
 impl Error for SteamError {}
 
+#[cfg_attr(test, automock)]
 pub trait SteamThings {
-    fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>>;
+    fn get_games_locations(
+        &self,
+        game_ids: &Vec<&'static str>,
+    ) -> SteamResult<Vec<(String, PathBuf)>>;
     fn run_game(&self, game: &Game) -> SteamResult<()>;
     fn run_game_via_steam_manager(&self, id: &str) -> SteamResult<()>;
 }
 
 impl SteamThings for SteamManager {
     fn get_games_locations(&self, game_ids: &Vec<&str>) -> SteamResult<Vec<(String, PathBuf)>> {
-        let games = steam::games().report().change_context(SteamError::default())?;
+        let games = steam::games()
+            .report()
+            .change_context(SteamError::default())?;
 
-        let game_path_vec: Vec<(String, PathBuf)> = games
+        let game_path_vec: Vec<(SteamId, PathBuf)> = games
             .iter()
-            .filter_map(
-                |game| match game_ids.iter().any(|id| *id == game.id) {
-                    true => Some((game.id.clone(), game.path.to_owned()?)),
-                    false => None,
-                },
-            )
+            .filter_map(|game| match game_ids.iter().any(|id| *id == game.id) {
+                true => Some((game.id.clone(), game.path.to_owned()?)),
+                false => None,
+            })
             .collect();
         Ok(game_path_vec)
     }
 
     fn run_game(&self, game: &Game) -> SteamResult<()> {
-        manager::launch_game(game).report().change_context(SteamError::default())?;
+        manager::launch_game(game)
+            .report()
+            .change_context(SteamError::default())?;
         Ok(())
     }
 
     fn run_game_via_steam_manager(&self, id: &str) -> SteamResult<()> {
-        let game = steam::find(id).report().change_context(SteamError::GameNotFoundById(id.to_string()))?;
-        manager::launch_game(&game).report().change_context(SteamError::default())?;
+        let game = steam::find(id)
+            .report()
+            .change_context(SteamError::GameNotFoundById(id.to_string()))?;
+        manager::launch_game(&game)
+            .report()
+            .change_context(SteamError::default())?;
         Ok(())
     }
 }
