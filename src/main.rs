@@ -32,10 +32,8 @@ pub mod dialogs {
     pub mod dialogs;
     pub mod dialogs_label;
 }
-pub mod unzip {
-    pub mod UnzipError;
-    pub mod unzip;
-}
+pub mod unzip;
+
 #[cfg(test)]
 mod tests {
     pub mod integration;

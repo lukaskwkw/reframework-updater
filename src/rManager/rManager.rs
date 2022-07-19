@@ -30,7 +30,6 @@ use crate::{
         config::ConfigProvider,
         configStruct::{ErrorLevel, GameConfig, REvilConfig, Runtime, ShortGameName},
     },
-    unzip::unzip,
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, init_logger::init_logger,
@@ -40,6 +39,11 @@ use crate::{
     DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
     STANDARD_TYPE_QUALIFIER,
 };
+
+#[cfg(test)]
+use crate::unzip::unzip::mock_unzip as unzip;
+#[cfg(not(test))]
+use crate::unzip::unzip::unzip;
 
 use error_stack::{IntoReport, Report, Result, ResultExt};
 use log::{debug, error, info, log, trace, warn, Level};
@@ -85,6 +89,7 @@ impl REvilThings for REvilManager {
             })?;
         self.config = config;
         self.attach_logger()?;
+        info!("config loaded successfully, logger initialized");
         Ok(self)
     }
 
@@ -134,10 +139,14 @@ impl REvilThings for REvilManager {
                 .games
                 .entry(game_short_name.to_string())
                 .and_modify(|game| {
-                    GameConfig {
-                        runtime: game.runtime.clone(),
+                    let runtime = game.runtime.clone().or(game_config.runtime.clone()).unwrap();
+                    debug!("runtime {:?} game {}", runtime, game_short_name);
+                    *game = GameConfig {
+                        runtime: Some(runtime),
                         nextgen: game.nextgen.clone(),
                         runArgs: game.runArgs.clone(),
+                        versions: game.versions.clone(),
+                        version_in_use: game.version_in_use.clone(),
                         ..game_config.clone()
                     };
                 })
@@ -193,15 +202,7 @@ impl REvilThings for REvilManager {
                     "Env::current_exe fail".to_string(),
                 ))?;
 
-        let ms_links_folder = Path::new("REFR_links");
-        // TODO maybe move it to local_provider as I did with create_ms_lnk
-        fs::create_dir_all(&ms_links_folder).map_err(|err| {
-            Report::new(REvilManagerError::FailedToCreateMsLink(format!(
-                "Error during create_dir_all path {} Err {}",
-                ms_links_folder.display(),
-                err
-            )))
-        })?;
+        let ms_links_folder = self.local_provider.create_cache_dir()?;
 
         self.config
             .games
@@ -318,7 +319,11 @@ impl REvilThings for REvilManager {
                 REvilManagerError::ReleaseManagerIsNotInitialized,
             ))?;
         self.dialogs
-            .ask_for_decision_and_populate_selected_assets(&mut self.config, &mut self.state, report)
+            .ask_for_decision_and_populate_selected_assets(
+                &mut self.config,
+                &mut self.state,
+                report,
+            )
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
@@ -376,7 +381,26 @@ impl REvilThings for REvilManager {
             .location
             .as_ref()
             .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
-        unzip(path, location, &game_config.runtime, unzip_skip_fun)?;
+
+        if unzip_skip_fun.is_some() {
+            unzip(&path, &location, unzip_skip_fun)
+                .change_context(REvilManagerError::UnzipError)?;
+            return Ok(self);
+        };
+        let closure = game_config
+            .runtime
+            .as_ref()
+            .map(|runtime| -> Box<dyn Fn(&OsStr) -> bool> {
+                let should_skip = |f: &OsStr| f == OsStr::new(&runtime.as_opposite_local_dll());
+                return Box::new(should_skip);
+            })
+            .unwrap_or_else(|| {
+                let should_skip =
+                    |f: &OsStr| f == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
+                return Box::new(should_skip);
+            });
+
+        unzip(path, location, Some(closure)).change_context(REvilManagerError::UnzipError)?;
         Ok(self)
     }
 
@@ -474,7 +498,8 @@ impl REvilThings for REvilManager {
 
         results.iter().for_each(|result| {
             result.as_ref().unwrap_or_else(|err| {
-                error!("{:?}", err);
+                warn!("{}", err);
+                debug!("{:#?}", err);
                 &()
             });
         });
@@ -492,7 +517,10 @@ impl REvilThings for REvilManager {
 
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self> {
         self.dialogs
-            .ask_for_game_decision_if_needed_and_set_game_to_launch(&mut self.config, &mut self.state)
+            .ask_for_game_decision_if_needed_and_set_game_to_launch(
+                &mut self.config,
+                &mut self.state,
+            )
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
@@ -592,7 +620,10 @@ impl REvilThings for REvilManager {
             return Ok(());
         }
         info!("Before launch procedure - start");
-        let game_dir = game_config.location.as_ref().unwrap();
+        let game_dir = game_config
+            .location
+            .as_ref()
+            .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
         let game_dir = Path::new(&game_dir);
 
         let runtime = game_config.runtime.as_ref().unwrap();
@@ -831,18 +862,23 @@ fn add_asset_ver_to_game_conf_ver(
 }
 
 fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> {
-    let game_folder = Path::new(game_config.location.as_ref().unwrap());
+    let game_folder = Path::new(
+        game_config
+            .location
+            .as_ref()
+            .ok_or(Report::new(REvilManagerError::GameLocationMissing))?,
+    );
     let open_runtime_path = game_folder.join(
         game_config
             .runtime
             .as_ref()
-            .unwrap()
+            .ok_or(REvilManagerError::ModRuntimeIsNone("".to_string()))?
             .as_opposite_local_dll(),
     );
     Ok(if Path::new(&open_runtime_path).exists() {
         fs::remove_file(&open_runtime_path)
             .report()
-            .change_context(REvilManagerError::RemoveFileFiled(
+            .change_context(REvilManagerError::RemoveFileFailed(
                 open_runtime_path.display().to_string(),
             ))?;
         debug!(
@@ -855,35 +891,6 @@ fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> 
             open_runtime_path.display()
         );
     })
-}
-
-pub fn unzip<F>(
-    file: impl AsRef<Path>,
-    destination: impl AsRef<Path>,
-    runtime: &Option<Runtime>,
-    skip_fun: Option<F>,
-) -> ResultManagerErr<()>
-where
-    F: Fn(&OsStr) -> bool,
-{
-    if skip_fun.is_some() {
-        unzip::unzip(&file, &destination, skip_fun)
-            .change_context(REvilManagerError::UnzipError)?;
-        return Ok(());
-    };
-    let closure = runtime
-        .as_ref()
-        .map(|runtime| -> Box<dyn Fn(&OsStr) -> bool> {
-            let should_skip = |f: &OsStr| f == OsStr::new(&runtime.as_opposite_local_dll());
-            return Box::new(should_skip);
-        })
-        .unwrap_or_else(|| {
-            let should_skip = |f: &OsStr| f == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
-            return Box::new(should_skip);
-        });
-
-    unzip::unzip(file, destination, Some(closure)).change_context(REvilManagerError::UnzipError)?;
-    Ok(())
 }
 
 fn get_steam_id_by_short_name<'a>(

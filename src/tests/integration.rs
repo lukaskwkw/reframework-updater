@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod tests {
     use std::ffi::OsStr;
+    use std::path::PathBuf;
 
     use crate::args::{ArgsClap, RunAfter};
     use crate::strategy::StrategyFactory::StrategyFactory;
@@ -15,37 +16,27 @@ pub mod tests {
         utils::local_version::MockLocalFiles,
     };
 
-    // TODO maybe finish this below
-    // or maybe it wont be necessary as not going to test other modules than rManager
-    // just check for .exists fs:: and similar in rManager 
-    pub struct Path {}
-    impl Path {
-        pub fn new(path: &str) -> Self {
-            Self { }
-        }
-        fn exists() -> bool {
-            true
-        }
-    }
-
     #[test]
-    fn default_route() {
+    fn for_different_settings_from_config_file_should_execute_default_route_without_errors() {
         unsafe {
             ARGS = Some(ArgsClap {
-                level: ErrorLevel::debug,
+                level: ErrorLevel::info,
                 one: "none".to_string(),
                 run: RunAfter::no,
             });
         }
         let mock_steam_things = MockSteamThings::new();
         let mock_local_files = MockLocalFiles::new();
-
         let mut steam_menago = Box::new(mock_steam_things);
-        let mut local_provider = Box::new(mock_local_files);
+        let mut local_provider_mock = Box::new(mock_local_files);
         prepare_steam_mock(&mut steam_menago);
-        local_provider
+        local_provider_mock
             .expect_create_ms_lnk()
             .returning(|_, _, _| Ok(()));
+
+        local_provider_mock
+            .expect_create_cache_dir()
+            .returning(|| Ok(PathBuf::from("ms/links/folder")));
 
         let dialogs = get_dialogs_provider_mock();
 
@@ -55,7 +46,7 @@ pub mod tests {
 
         let mut evil_manager = REvilManager::new(
             get_config_provider_mock(),
-            local_provider,
+            local_provider_mock,
             steam_menago,
             dialogs,
             mock_reft_constr,
