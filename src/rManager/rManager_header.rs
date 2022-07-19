@@ -82,12 +82,13 @@ pub enum REvilManagerError {
     GameNotFoundForGivenShortName(String),
     GameNotFoundForGivenSteamId(String),
     CannotDeductShortNameFromAssetName(String),
-    RemoveFileFiled(String),
+    RemoveFileFailed(String),
     RemoveZipAssetFromCacheErr(String),
     CacheNotFoundForGivenVersion(String),
     FailedToCreateMsLink(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
+    ModRuntimeIsNone(String),
     GetLocalPathToCacheErr,
     UnzipError,
     SaveConfigError,
@@ -118,7 +119,7 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::SaveConfigError => write!(f, "SaveConfigError"),
             REvilManagerError::LoadConfigError => write!(f, "LoadConfigError"),
             REvilManagerError::Other => write!(f, "Other"),
-            REvilManagerError::RemoveFileFiled(info) => write!(f, "RemoveFileFiled {}", info),
+            REvilManagerError::RemoveFileFailed(info) => write!(f, "RemoveFileFiled {}", info),
             REvilManagerError::GameNotFoundForGivenSteamId(info) => {
                 write!(f, "GameNotFoundForGivenSteamId {}", info)
             }
@@ -129,6 +130,7 @@ impl fmt::Display for REvilManagerError {
                 write!(f, "FailedToCreateMsLink {}", info)
             }
             REvilManagerError::GetLocalPathToCacheErr => write!(f, "GetLocalPathToCacheErr"),
+            REvilManagerError::ModRuntimeIsNone(game) => write!(f, "ModRuntimeIsNone for {}", game),
         }
     }
 }

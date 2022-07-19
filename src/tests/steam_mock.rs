@@ -21,4 +21,7 @@ pub fn prepare_steam_mock(steam_menago: &mut Box<MockSteamThings>) {
         .to_vec();
         Ok(game_path_vec)
     });
+    steam_menago
+        .expect_run_game_via_steam_manager()
+        .returning(|_| Ok(()));
 }

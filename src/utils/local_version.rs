@@ -1,15 +1,20 @@
 #[cfg(test)]
-use mockall::{automock};
+use mockall::automock;
 use mslnk::ShellLink;
 
 use std::{
     error::Error,
     fmt::{self, Display, Formatter},
+    fs,
     path::{Path, PathBuf},
 };
 
-use crate::{tomlConf::configStruct::Runtime, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER, DynResult};
-use error_stack::{IntoReport, Result, ResultExt};
+use crate::{
+    rManager::rManager_header::{REvilManagerError, ResultManagerErr},
+    tomlConf::configStruct::Runtime,
+    DynResult, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER,
+};
+use error_stack::{IntoReport, Report, Result, ResultExt};
 use log::{debug, warn};
 
 use super::binSearch::find_string_in_binary_file;
@@ -27,7 +32,13 @@ pub struct LocalGameConfig {
 #[cfg_attr(test, automock)]
 pub trait LocalFiles {
     fn get_local_report_for_game(&self, game_path: &str, game_short_name: &str) -> LocalGameConfig;
-    fn create_ms_lnk(&self, lnk_name: &PathBuf, target: &PathBuf, arguments: Option<String>) -> DynResult<()>;
+    fn create_ms_lnk(
+        &self,
+        lnk_name: &PathBuf,
+        target: &PathBuf,
+        arguments: Option<String>,
+    ) -> DynResult<()>;
+    fn create_cache_dir(&self) -> ResultManagerErr<PathBuf>;
 }
 
 pub fn create_tdb_string(game_short_name: &str) -> String {
@@ -55,11 +66,29 @@ impl LocalFiles for LocalProvider {
             nextgen: map_to_nextgen(game_path, game_short_name),
         }
     }
-    fn create_ms_lnk(&self, lnk_name: &PathBuf, target: &PathBuf, arguments: Option<String>) -> DynResult<()> {
+    fn create_ms_lnk(
+        &self,
+        lnk_name: &PathBuf,
+        target: &PathBuf,
+        arguments: Option<String>,
+    ) -> DynResult<()> {
         let mut sl = ShellLink::new(target)?;
         sl.set_arguments(arguments);
         sl.create_lnk(lnk_name)?;
-        Ok(()) 
+        Ok(())
+    }
+
+    fn create_cache_dir(&self) -> ResultManagerErr<PathBuf> {
+        let ms_links_folder = Path::new("REFR_links");
+
+        fs::create_dir_all(&ms_links_folder).map_err(|err| {
+            Report::new(REvilManagerError::FailedToCreateMsLink(format!(
+                "Error during create_dir_all path {} Err {}",
+                ms_links_folder.display(),
+                err
+            )))
+        })?;
+        Ok(ms_links_folder.to_path_buf())
     }
 }
 

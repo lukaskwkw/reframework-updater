@@ -118,7 +118,6 @@ impl Strategy for DefaultRoute {
     }
 }
 
-// TODO move it to main in order to be testable
 fn get_args() -> String {
     let mut run = "none".to_string();
     unsafe {
