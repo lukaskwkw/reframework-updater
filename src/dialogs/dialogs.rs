@@ -81,16 +81,18 @@ impl Ask for Dialogs {
         state: &mut REvilManagerState,
         report: &HashMap<String, Vec<ReleaseAsset>>,
     ) -> ResultDialogsErr<()> {
-        let (different_found, any_none, games) = &self
+        let (different_found, any_not_installed_mods_with_both_ver_supporting, game_decisions) = &self
             .prepare_decision_report(config, state, report)
             .change_context(DialogsErrors::Other)?;
         let mut selections = vec![];
-        if games.len() > 0 {
+        if game_decisions.len() > 0 {
             selections.push(UpdateAllGames.to_label());
-            if *different_found && !*any_none {
+            if *different_found && !*any_not_installed_mods_with_both_ver_supporting {
                 // will choose base of your current local mod settings per game
                 selections[0] = UpdateAllGamesAutoDetect.to_label();
-            } else if *different_found && *any_none {
+            } else if *different_found && *any_not_installed_mods_with_both_ver_supporting {
+                // will choose base of your current local mod settings per game
+                // for games that support both versions will choose base of below decision
                 selections.push(UpdateAllGamesPreferStandard.to_label());
                 selections[0] = UpdateAllGamesPreferNextgen.to_label();
             }
@@ -99,14 +101,14 @@ impl Ask for Dialogs {
             return Ok(());
         };
 
-        let mut texts: Vec<String> = games.keys().cloned().collect();
+        let mut texts: Vec<String> = game_decisions.keys().cloned().collect();
         texts.sort_by(|a, b| REvilManager::sort(a, b));
         selections.extend(texts);
         debug!("{:#?}", selections);
 
         let count = state.games_that_require_update.len();
         let mut additional_text = "";
-        if *different_found && *any_none {
+        if *different_found && *any_not_installed_mods_with_both_ver_supporting {
             additional_text = r"Also found that some of your games that
              can support both types Nextgen/Standard don't have mod installed yet.
              Chose which mod type use for them. For other games program will use correct version.";
@@ -121,7 +123,7 @@ impl Ask for Dialogs {
 
         debug!(
             "selection {}, different_found {}, any_none {}",
-            selection, different_found, any_none
+            selection, different_found, any_not_installed_mods_with_both_ver_supporting
         );
 
         // important do not change order of below if call as later in iteration may provide out of index error
@@ -136,38 +138,33 @@ impl Ask for Dialogs {
         };
 
         if sel != Skip && sel != Other {
-            games.values().for_each(|(asset, include, _)| {
-                include
-                    .map(|should_include| {
-                        if !should_include {
-                            debug!("Asset {} not added", asset.name);
-                            return;
-                        }
-                        debug!("adding asset {}", asset.name);
+            game_decisions.values().for_each(|(asset, include, _)| {
+                if *include {
+                    state.selected_assets.push(asset.clone());
+                } else {
+                    if !*different_found || !*any_not_installed_mods_with_both_ver_supporting {
+                        return;
+                    }
+
+                    if !asset.name.contains(STANDARD_TYPE_QUALIFIER)
+                        && sel == UpdateAllGamesPreferNextgen
+                    {
+                        debug!("adding nextgen asset for {}", asset.name);
                         state.selected_assets.push(asset.clone());
-                    })
-                    .unwrap_or_else(|| {
-                        (*different_found && *any_none).then(|| {
-                            if asset.name.contains(STANDARD_TYPE_QUALIFIER) {
-                                if sel != UpdateAllGamesPreferStandard {
-                                    return;
-                                }
-                                debug!("adding standard asset for {}", asset.name);
-                                state.selected_assets.push(asset.clone())
-                            } else {
-                                if sel != UpdateAllGamesPreferNextgen {
-                                    return;
-                                }
-                                debug!("adding nextgen asset for {}", asset.name);
-                                state.selected_assets.push(asset.clone());
-                            }
-                        });
-                    });
+                        return;
+                    }
+
+                    if sel != UpdateAllGamesPreferStandard {
+                        return;
+                    }
+                    debug!("adding standard asset for {}", asset.name);
+                    state.selected_assets.push(asset.clone())
+                };
             });
             return Ok(());
         }
 
-        if let Some((asset, _, game_id)) = games.get(&selections[selection]) {
+        if let Some((asset, _, game_id)) = game_decisions.get(&selections[selection]) {
             debug!("adding asset {}", asset.name);
             state.selected_assets.push(asset.clone().clone());
             state.selected_game_to_launch = game_id.clone();
@@ -344,19 +341,24 @@ impl Ask for Dialogs {
         {
             return Ok(Early);
         }
-        let mut selections: Vec<String> = Vec::new();
-
-        config.games.iter().for_each(|(short_name, game)| {
-            game.nextgen
-                .map(|nextgen| {
+        let mut selections: Vec<String> = config
+            .games
+            .iter()
+            .filter_map(|(short_name, game)| {
+                let label = game.nextgen.map(|nextgen| {
                     if nextgen {
-                        selections.push(SwitchToStandard(short_name.to_string()).to_label());
+                        SwitchToStandard(short_name.to_string()).to_label()
                     } else {
-                        selections.push(SwitchToNextgen(short_name.to_string()).to_label());
+                        SwitchToNextgen(short_name.to_string()).to_label()
                     }
-                })
-                .unwrap_or_default();
-        });
+                });
+                if label.is_some() {
+                    return Some(label.unwrap());
+                };
+                None
+            })
+            .collect();
+
         selections.push(Exit.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(format!("Select game to switch"))
@@ -382,30 +384,25 @@ impl Ask for Dialogs {
                     let versions = game_config.versions.as_mut().unwrap();
                     let first_set = versions.first_mut().unwrap();
 
-                    let second_asset_name = first_set
-                        .iter()
-                        .skip(1)
-                        .find(|name| {
-                            is_asset_tdb(
-                                &short_name,
-                                &ReleaseAsset {
-                                    name: name.to_string(),
-                                    ..Default::default()
-                                },
-                            )
-                            .map(|is_tdb| ((is_tdb && !next_gen) || (!is_tdb && next_gen)))
-                            .unwrap_or_default()
-                        })
-                        .unwrap_or(&"dupa".to_string())
-                        .clone();
+                    let second_asset_name = first_set.iter().skip(1).find(|name| {
+                        is_asset_tdb(
+                            &short_name,
+                            &ReleaseAsset {
+                                name: name.to_string(),
+                                ..Default::default()
+                            },
+                        )
+                        .map(|is_tdb| ((is_tdb && !next_gen) || (!is_tdb && next_gen)))
+                        .unwrap_or_default()
+                    });
 
-                    // I didn't know how to solve a borrow checker issue so if second cache asset doesn't exist then assign "dupa" as asset name
-                    if second_asset_name != "dupa" {
+                    if second_asset_name.is_some() {
+                        let second_asset_name = second_asset_name.unwrap();
                         debug!("preparing unzip for {}", second_asset_name);
                         // TODO if asset from cache is missing then it will panic maybe make it to download asset instead?
                         // but it requires first removing it from versions, saving config and running process again
                         // TODO change it to either launch the game or back to previous section after ok
-                        return Ok(UnzipSaveAndExit(short_name, second_asset_name));
+                        return Ok(UnzipSaveAndExit(short_name, second_asset_name.clone()));
                     }
 
                     let version = first_set.first_mut().unwrap();
@@ -433,84 +430,95 @@ impl Dialogs {
         &self,
         config: &REvilConfig,
         state: &mut REvilManagerState,
-        report: &HashMap<String, Vec<ReleaseAsset>>,
+        assets_report: &HashMap<ShortGameName, Vec<ReleaseAsset>>,
     ) -> ResultManagerErr<(
         bool,
         bool,
-        HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>,
+        HashMap<String, (ReleaseAsset, bool, Option<String>)>,
     )> {
-        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only game like
+        // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only games like
         // MHRISE DMC5 then it should not change thus should not display specific message later
         let mut different_found = false;
         // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
-        let mut any_none = false;
-        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> =
-            HashMap::new();
+        let mut is_any_game_support_sec_version_but_mod_is_not_installed = false;
+        let mut games: HashMap<String, (ReleaseAsset, bool, Option<SteamId>)> = HashMap::new();
 
         // TODO next-time be careful with those combinators
-        report.iter().for_each(|(game_short_name, assets)| {
-            state
-                .games_that_require_update
-                .contains(game_short_name)
-                .then(|| {
-                    assets.iter().for_each(|asset| {
-                        let mut text = "".to_string();
-                        let mut include_for_all_option = Some(true);
-                        let game_config = config.games.get(game_short_name).unwrap();
-                        is_asset_tdb(game_short_name, asset)
-                            .and_then(|does| {
-                                different_found = true;
-                                let nextgen = game_config.nextgen;
+        assets_report.iter().for_each(|(game_short_name, assets)| {
+            if !state.games_that_require_update.contains(game_short_name) {
+                return;
+            };
+            debug!("Processing game: {}", game_short_name);
 
-                                does.then(|| {
-                                    text = format!("{} Standard version", game_short_name);
-                                    nextgen.and_then(|nextgen| {
-                                        nextgen.then(|| {
-                                            include_for_all_option = Some(false);
-                                            get_label_for_download_switch(
-                                                &mut text, "nextgen", "standard",
-                                            );
-                                        })
-                                    })
-                                })
-                                .unwrap_or_else(|| {
-                                    text = format!("{} Nextgen version", game_short_name);
-                                    nextgen.map(|next_gen| {
-                                        (!next_gen).then(|| {
-                                            include_for_all_option = Some(false);
-                                            get_label_for_download_switch(
-                                                &mut text, "standard", "nextgen",
-                                            );
-                                        });
-                                    })
-                                })
-                                .unwrap_or_else(|| {
-                                    if nextgen.is_none() {
-                                        debug!("None for {}, {}", game_short_name, asset.name);
-                                        include_for_all_option = None;
-                                        any_none = true;
-                                    }
-                                });
-                                return Some(());
-                            })
-                            .unwrap_or_else(|| text = game_short_name.to_string());
-                        games.insert(
-                            text,
-                            (
-                                asset.clone(),
-                                include_for_all_option,
-                                game_config.steamId.clone(),
-                            ),
-                        );
+            assets.iter().for_each(|asset| {
+                debug!("Processing asset: {}", asset.name);
+                let game_config = config.games.get(game_short_name).unwrap();
+                let (
+                    text,
+                    include_for_all_option,
+                    mod_is_probably_not_installed,
+                    does_asset_support_2_version_of_mod,
+                ) = is_asset_tdb(game_short_name, asset)
+                    .map(|is_tdb| {
+                        const TWO_VERSION_SUPPORTED: bool = true;
+                        let nextgen = match game_config.nextgen {
+                            Some(it) => it,
+                            None => {
+                                debug!("Nextgen field is missing for {} - game supporting both version. Probably mod is not installed", game_short_name);
+                                return (game_short_name.to_string(), false, true, TWO_VERSION_SUPPORTED)
+                            }
+                        };
+
+                        if !is_tdb {
+                            let mut text = format!("{} Nextgen version", game_short_name);
+                            if nextgen {
+                                debug!("Asset is Nextgen like installed mod");
+                                return (text, true, false, TWO_VERSION_SUPPORTED);
+                            };
+                            debug!("Asset is TDB but installed mod is nextgen");
+                            set_label_for_download_switch(&mut text, "standard", "nextgen");
+                            return (text, false, false, TWO_VERSION_SUPPORTED);
+                        };
+
+                        let mut text = format!("{} Standard version", game_short_name);
+                        if !nextgen {
+                            debug!("Asset is TDB like installed mod");
+                            return (text, true, false, TWO_VERSION_SUPPORTED);
+                        };
+                        debug!("Asset is Nextgen but installed mod is TDB");
+                        set_label_for_download_switch(&mut text, "nextgen", "standard");
+                        return (text, false, false, TWO_VERSION_SUPPORTED);
+                    })
+                    .unwrap_or_else(|| {
+                        debug!("asset is not TDB nor Nextgen");
+                         (game_short_name.to_string(), true, false, false) 
                     });
-                })
-                .unwrap_or_default();
+                if mod_is_probably_not_installed {
+                    is_any_game_support_sec_version_but_mod_is_not_installed = mod_is_probably_not_installed;
+                }
+                if does_asset_support_2_version_of_mod {
+                    different_found = does_asset_support_2_version_of_mod;
+                }
+                games.insert(
+                    text,
+                    (
+                        asset.clone(),
+                        include_for_all_option,
+                        game_config.steamId.clone(),
+                    ),
+                );
+            });
         });
-        Ok((different_found, any_none, games))
+
+        Ok((
+            different_found,
+            is_any_game_support_sec_version_but_mod_is_not_installed,
+            games,
+        ))
     }
 }
 
-fn get_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_std_sec: &str) {
+fn set_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_std_sec: &str) {
     *text = format!(
         "{}      {}(your current version of mod is {} -> it will switch to {})",
         text,
@@ -519,3 +527,6 @@ fn get_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_s
         next_or_std_sec.to_string()
     );
 }
+
+#[cfg(test)]
+mod dialog_tests;

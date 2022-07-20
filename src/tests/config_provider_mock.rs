@@ -9,7 +9,9 @@ pub mod mock_conf_provider {
 
         let mut config_provider = Box::new(mock_config_provider);
 
-        config_provider.expect_load_from_file().return_once(|| {
+        // TODO this should be called once but not sure how to make it compatible with dialogs_tests so
+        // it is returning instead return_once
+        config_provider.expect_load_from_file().returning(|| {
             let content = r#"
         [main]
         sources = ["normal", "nightly"]

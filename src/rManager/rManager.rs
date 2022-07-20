@@ -139,7 +139,11 @@ impl REvilThings for REvilManager {
                 .games
                 .entry(game_short_name.to_string())
                 .and_modify(|game| {
-                    let runtime = game.runtime.clone().or(game_config.runtime.clone()).unwrap();
+                    let runtime = game
+                        .runtime
+                        .clone()
+                        .or(game_config.runtime.clone())
+                        .unwrap();
                     debug!("runtime {:?} game {}", runtime, game_short_name);
                     *game = GameConfig {
                         runtime: Some(runtime),
@@ -447,9 +451,9 @@ impl REvilThings for REvilManager {
                 // TODO add check if there was error for selected_assets during unzip or download
                 // for particular asset as data saved later would be invalid maybe selected_assets should have additional field
                 // like error with error type in there
-                info!("After unzip work - start");
                 // for TDB assets STANDARD_TYPE_QUALIFIER is used and for rest games included nextgens ".zip"
                 let game_short_name = get_game_short_name_from_asset(&asset)?;
+                info!("After unzip work for {} - start", game_short_name);
 
                 // remove game from req_update_games vec as it is already updated!
                 remove_game_from_update_needed_ones(
@@ -491,7 +495,7 @@ impl REvilThings for REvilManager {
                     game_config.versions = Some(versions);
                 }
                 debug!("{:?}", game_config.versions);
-                info!("After unzip work - done");
+                info!("After unzip work for {game_short_name} - done");
                 Ok(())
             })
             .collect();
@@ -733,7 +737,7 @@ impl REvilManager {
                     });
                 } else {
                     debug!(
-                        "Version is None treating like needs to be added for {}.",
+                        "Version is None treating like needs to be added for update. For {}.",
                         short_name
                     );
                     self.state
@@ -767,7 +771,9 @@ fn set_game_from_report_as_selected_to_download(
         REvilManagerError::ReleaseManagerIsNotInitialized,
     ))?;
     let report = rel_manager.getAssetsReport();
+    // TODO this below probably fail for non nextgen type game
     let nextgen = game_config.nextgen.unwrap();
+    // TODO refactor this below
     report
         .iter()
         .find(|(short_name, _)| *short_name == game_short_name)
@@ -825,39 +831,47 @@ fn add_asset_ver_to_game_conf_ver(
     asset: &ReleaseAsset,
 ) {
     debug!("Adding asset {}", &asset.name);
-    game_config
-        .versions
-        .as_mut()
-        .map(|versions| {
-            let first_set = versions.first().unwrap();
-            if first_set[0] == SWITCH_IDENTIFIER {
-                if first_set.len() > 1 {
-                    let vecc = [
-                        version.to_string(),
-                        asset.name.to_string(),
-                        first_set[1].to_string(),
-                    ]
-                    .to_vec();
-                    debug!(
-                        "switch has one or more assets. Assets len {}",
-                        first_set.len() - 1
-                    );
-                    versions.remove(0);
-                    versions.insert(0, vecc);
-                } else {
-                    debug!("switch has no assets");
-                    versions.remove(0);
-                    versions.insert(0, [version.to_string(), asset.name.to_string()].to_vec());
-                }
+    let version_and_switch = game_config.versions.as_ref().map(|versions| {
+        let first_set = versions.first().unwrap();
+        if first_set[0] == SWITCH_IDENTIFIER {
+            if first_set.len() > 1 {
+                let vecc = [
+                    version.to_string(),
+                    asset.name.to_string(),
+                    first_set[1].to_string(),
+                ]
+                .to_vec();
+                debug!(
+                    "switch has one or more assets. Assets len {}",
+                    first_set.len() - 1
+                );
+                return (vecc, true);
             } else {
-                debug!("no switch asset {}", asset.name);
-                versions.insert(0, [version.to_string(), asset.name.to_string()].to_vec())
+                debug!("switch has no assets");
+                return ([version.to_string(), asset.name.to_string()].to_vec(), true);
             }
-        })
-        .unwrap_or_else(|| {
-            game_config.versions =
-                Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec())
-        });
+        } else {
+            debug!("no switch asset {}", asset.name);
+            (
+                [version.to_string(), asset.name.to_string()].to_vec(),
+                false,
+            )
+        }
+    });
+    if version_and_switch.is_none() {
+        game_config.versions =
+            Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec());
+    } else {
+        let (version, switch) = version_and_switch.unwrap();
+        let versions = game_config.versions.as_mut().unwrap();
+        
+        if switch {
+            versions.remove(0);
+            versions.insert(0, version);
+        } else {
+            versions.insert(0, version);
+        }
+    }
     game_config.version_in_use = Some(version.to_string());
 }
 
@@ -897,6 +911,7 @@ fn get_steam_id_by_short_name<'a>(
     games: &'a HashMap<ShortGameName, GameConfig>,
     game_short_name: &'a String,
 ) -> &'a String {
+    // TODO maybe handle those two unwraps?
     let game_config = games.get(game_short_name).unwrap();
     let steam_id = game_config.steamId.as_ref().unwrap();
     steam_id

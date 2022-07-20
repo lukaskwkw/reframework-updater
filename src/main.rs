@@ -56,8 +56,9 @@ mod tomlConf {
     pub mod FromValue;
     pub mod config;
     pub mod configStruct;
-    pub mod configTest;
     pub mod utils;
+    #[cfg(test)]
+    pub mod configTest;
 }
 
 pub type DynResult<T> = Result<T, Box<dyn Error>>;
