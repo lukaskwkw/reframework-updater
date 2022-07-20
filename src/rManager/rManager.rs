@@ -769,29 +769,37 @@ fn set_game_from_report_as_selected_to_download(
     let rel_manager = rel_manager.ok_or(Report::new(
         REvilManagerError::ReleaseManagerIsNotInitialized,
     ))?;
-    let report = rel_manager.getAssetsReport();
-    // TODO this below probably fail for non nextgen type game
-    let nextgen = game_config.nextgen.unwrap();
-    // TODO refactor this below
-    report
+    let assets_report = rel_manager.getAssetsReport();
+
+    assets_report
         .iter()
         .find(|(short_name, _)| *short_name == game_short_name)
         .and_then(|(short_name, assets)| {
             assets.iter().for_each(|asset| {
-                is_asset_tdb(short_name, asset)
-                    .map(|does| {
-                        if (does && !nextgen) || (!does && nextgen) {
-                            debug!("TDB/Nextgen. Added asset to download: {}", asset.name);
-                            selected_assets.push(asset.clone())
+                let should_include_if_ng_supported = is_asset_tdb(short_name, asset)
+                    .and_then(|is_tdb| {
+                        if game_config.nextgen.is_some() {
+                            return Some((is_tdb, game_config.nextgen.unwrap()));
                         };
+                        // if nextgen field is missing but game supports both versions then download TDB
+                        return Some((is_tdb, false));
                     })
-                    .unwrap_or_else(|| {
-                        debug!(
-                            "None-TDB/None-Nextgen Added asset to download: {}",
-                            asset.name
-                        );
-                        selected_assets.push(asset.clone())
+                    .and_then(|(is_tdb, nextgen)| {
+                        Some((is_tdb && !nextgen) || (!is_tdb && nextgen))
                     });
+
+                if should_include_if_ng_supported.is_some()
+                    && should_include_if_ng_supported.unwrap()
+                {
+                    debug!("TDB/Nextgen. Added asset to download: {}", asset.name);
+                    selected_assets.push(asset.clone())
+                } else if should_include_if_ng_supported.is_none() {
+                    debug!(
+                        "None-TDB/None-Nextgen Added asset to download: {}",
+                        asset.name
+                    );
+                    selected_assets.push(asset.clone())
+                }
             });
             return Some(());
         })
@@ -863,7 +871,7 @@ fn add_asset_ver_to_game_conf_ver(
     } else {
         let (version, switch) = version_and_switch.unwrap();
         let versions = game_config.versions.as_mut().unwrap();
-        
+
         if switch {
             versions.remove(0);
             versions.insert(0, version);
