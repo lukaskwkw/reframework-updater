@@ -313,7 +313,6 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    // TODO consider testing scenario for games without NEXTGEN option like i.e. only ["MHRISE". "DCM5", "RE8"]
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self> {
         let report = self
             .github_release_manager
