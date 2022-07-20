@@ -1,4 +1,4 @@
-use log::debug;
+use log::trace;
 use self_update::update::Release;
 
 use crate::reframework_github::refr_github::REFRGithubError;
@@ -12,7 +12,7 @@ pub fn get_local_path_to_cache_folder(
     release: Option<&Release>,
     ver: Option<&str>,
 ) -> DynResult<PathBuf> {
-    debug!("release {:#?} ver {:?}", release, ver);
+    trace!("release {:#?} ver {:?}", release, ver);
     let version: String;
     if ver.is_none() {
         version = match release {

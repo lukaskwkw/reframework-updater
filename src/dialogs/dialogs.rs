@@ -273,7 +273,12 @@ impl Ask for Dialogs {
     fn get_selected_cache_option(&mut self, config: &mut REvilConfig) -> LabelOptions {
         let mut selections: Vec<String> = Vec::new();
         config.games.iter().for_each(|(short_name, game_config)| {
-            let versions = game_config.versions.as_ref().unwrap();
+            let versions = game_config.versions.as_ref();
+            if versions.is_none() {
+                info!("Not found any version records for {}. Please download one first", short_name);
+                return;
+            }
+            let versions = versions.unwrap();
             for ver_set in versions.iter() {
                 if ver_set.len() < 2 {
                     return;
@@ -286,7 +291,7 @@ impl Ask for Dialogs {
                     .map(|ver_in_use| ver_in_use == ver)
                     .unwrap_or_default()
                 {
-                    label_appendix = format!("{SORT_DETERMINER} this is your current version");
+                    label_appendix = format!("{SORT_DETERMINER} this is your current version - ");
                 }
                 ver_set.iter().skip(1).for_each(|asset_name| {
                     match get_local_path_to_cache_folder(None, Some(ver)) {
@@ -307,7 +312,7 @@ impl Ask for Dialogs {
                         ver.to_string(),
                     )
                     .to_label();
-                    let label = format!("{} - {}", label_appendix, label);
+                    let label = format!("{}{}", label_appendix, label);
                     selections.push(label);
                 })
             }
