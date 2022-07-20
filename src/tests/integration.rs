@@ -40,7 +40,6 @@ pub mod tests {
 
         let dialogs = get_dialogs_provider_mock();
 
-        // local_provider.
         // ctx variable has to be present even if it's not used - don't know why
         let (ctx, mock_reft_constr) = prepare_refr_github_mock_and_get_constr();
 

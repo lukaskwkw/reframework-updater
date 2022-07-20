@@ -25,12 +25,14 @@ use crate::{
 
 pub type GameShortName = String;
 
+pub type AssetsReport = HashMap<GameShortName, Vec<ReleaseAsset>>;
+
 #[derive(Clone, Debug, Default)]
 pub struct REFRGithub {
     repo_name: String,
     repo_owner: String,
     pub release: Option<Release>,
-    pub report: HashMap<GameShortName, Vec<ReleaseAsset>>,
+    pub report: AssetsReport,
 }
 
 #[derive(Debug)]
@@ -46,15 +48,13 @@ impl Display for REFRGithubError {
 
 impl Error for REFRGithubError {}
 
-type REFResultErr<T> = Result<T, REFRGithubError>;
-
 pub trait ManageGithub<T = REFRGithub> {
     fn get_reframework_latest_release(&mut self) -> DynResult<()>;
     fn generate_assets_report(&mut self) -> DynResult<()>;
     fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&T>;
     fn fetch_release(&self) -> DynResult<Release>;
     fn getRelease(&self) -> Option<&Release>;
-    fn getAssetsReport(&self) -> &HashMap<GameShortName, Vec<ReleaseAsset>>;
+    fn getAssetsReport(&self) -> &AssetsReport;
 }
 
 impl ManageGithub for REFRGithub {

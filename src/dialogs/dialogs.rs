@@ -19,7 +19,7 @@ use crate::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, is_asset_tdb::is_asset_tdb,
     },
-    STANDARD_TYPE_QUALIFIER,
+    STANDARD_TYPE_QUALIFIER, reframework_github::refr_github::AssetsReport,
 };
 
 #[derive(Debug, Default)]
@@ -85,21 +85,10 @@ impl Ask for Dialogs {
             .prepare_decision_report(config, state, report)
             .change_context(DialogsErrors::Other)?;
         let mut selections = vec![];
-        if game_decisions.len() > 0 {
-            selections.push(UpdateAllGames.to_label());
-            if *different_found && !*any_not_installed_mods_with_both_ver_supporting {
-                // will choose base of your current local mod settings per game
-                selections[0] = UpdateAllGamesAutoDetect.to_label();
-            } else if *different_found && *any_not_installed_mods_with_both_ver_supporting {
-                // will choose base of your current local mod settings per game
-                // for games that support both versions will choose base of below decision
-                selections.push(UpdateAllGamesPreferStandard.to_label());
-                selections[0] = UpdateAllGamesPreferNextgen.to_label();
-            }
-        } else {
+        if let None = populate_selections_with_general_options(game_decisions, &mut selections, different_found, any_not_installed_mods_with_both_ver_supporting) {
             info!("Not found any games to update");
             return Ok(());
-        };
+        }
 
         let mut texts: Vec<String> = game_decisions.keys().cloned().collect();
         texts.sort_by(|a, b| REvilManager::sort(a, b));
@@ -137,35 +126,12 @@ impl Ask for Dialogs {
             _ => (),
         };
 
-        if sel != Skip && sel != Other {
-            game_decisions.values().for_each(|(asset, include, _)| {
-                if *include {
-                    state.selected_assets.push(asset.clone());
-                } else {
-                    if !*different_found || !*any_not_installed_mods_with_both_ver_supporting {
-                        return;
-                    }
-
-                    if !asset.name.contains(STANDARD_TYPE_QUALIFIER)
-                        && sel == UpdateAllGamesPreferNextgen
-                    {
-                        debug!("adding nextgen asset for {}", asset.name);
-                        state.selected_assets.push(asset.clone());
-                        return;
-                    }
-
-                    if sel != UpdateAllGamesPreferStandard {
-                        return;
-                    }
-                    debug!("adding standard asset for {}", asset.name);
-                    state.selected_assets.push(asset.clone())
-                };
-            });
+        if let Some(_) = populate_selected_assets_base_on_general_option(sel, game_decisions, state, different_found, any_not_installed_mods_with_both_ver_supporting) {
             return Ok(());
         }
 
         if let Some((asset, _, game_id)) = game_decisions.get(&selections[selection]) {
-            debug!("adding asset {}", asset.name);
+            debug!("Adding single asset {}", asset.name);
             state.selected_assets.push(asset.clone().clone());
             state.selected_game_to_launch = game_id.clone();
         };
@@ -430,25 +396,79 @@ impl Ask for Dialogs {
     }
 }
 
+pub fn populate_selections_with_general_options(game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>, selections: &mut Vec<String>, different_found: &bool, any_not_installed_mods_with_both_ver_supporting: &bool) -> Option<()> {
+    if game_decisions.len() > 0 {
+        selections.push(UpdateAllGames.to_label());
+        if *different_found && !*any_not_installed_mods_with_both_ver_supporting {
+            // will choose base of your current local mod settings per game
+            selections[0] = UpdateAllGamesAutoDetect.to_label();
+        } else if *different_found && *any_not_installed_mods_with_both_ver_supporting {
+            // will choose base of your current local mod settings per game
+            // for games that support both versions will choose base of below decision
+            selections.push(UpdateAllGamesPreferStandard.to_label());
+            selections[0] = UpdateAllGamesPreferNextgen.to_label();
+        }
+        return Some(());
+    } else {
+        return None;
+    };
+}
+
+pub fn populate_selected_assets_base_on_general_option(sel: LabelOptions, game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>, state: &mut REvilManagerState, different_found: &bool, any_not_installed_mods_with_both_ver_supporting: &bool) -> Option<()> {
+    if sel != Skip && sel != Other {
+        game_decisions.values().for_each(|(asset, include, _)| {
+            if include.is_some() {
+                if !include.unwrap() {
+                    debug!("Asset not added {}", asset.name);
+                    return;
+                }
+                debug!("adding asset as included true asset {}", asset.name);
+                state.selected_assets.push(asset.clone());
+            } else {
+                if !*different_found || !*any_not_installed_mods_with_both_ver_supporting {
+                    return;
+                }
+
+                if asset.name.contains(STANDARD_TYPE_QUALIFIER) {
+                    if sel != UpdateAllGamesPreferStandard {
+                        return;
+                    }
+                    debug!("adding standard asset {}", asset.name);
+                    state.selected_assets.push(asset.clone())
+                } else {
+                    if sel != UpdateAllGamesPreferNextgen {
+                        return;
+                    }
+                    debug!("adding nextgen asset {}", asset.name);
+                    state.selected_assets.push(asset.clone());
+                }
+            };
+        });
+        return Some(());
+    }
+    None
+}
+
+type LabelText = String;
+
 impl Dialogs {
     fn prepare_decision_report(
         &self,
         config: &REvilConfig,
         state: &mut REvilManagerState,
-        assets_report: &HashMap<ShortGameName, Vec<ReleaseAsset>>,
+        assets_report: &AssetsReport,
     ) -> ResultManagerErr<(
         bool,
         bool,
-        HashMap<String, (ReleaseAsset, bool, Option<String>)>,
+        HashMap<LabelText, (ReleaseAsset, Option<bool>, Option<String>)>,
     )> {
         // it determines wether you have game that supports different version i.e. RE2 support both nextgen and standard but if you have only games like
         // MHRISE DMC5 then it should not change thus should not display specific message later
         let mut different_found = false;
         // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
         let mut is_any_game_support_sec_version_but_mod_is_not_installed = false;
-        let mut games: HashMap<String, (ReleaseAsset, bool, Option<SteamId>)> = HashMap::new();
+        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> = HashMap::new();
 
-        // TODO next-time be careful with those combinators
         assets_report.iter().for_each(|(game_short_name, assets)| {
             if !state.games_that_require_update.contains(game_short_name) {
                 return;
@@ -470,7 +490,11 @@ impl Dialogs {
                             Some(it) => it,
                             None => {
                                 debug!("Nextgen field is missing for {} - game supporting both version. Probably mod is not installed", game_short_name);
-                                return (game_short_name.to_string(), false, true, TWO_VERSION_SUPPORTED)
+                                if is_tdb {
+                                    return (format!("{} Standard version", game_short_name.to_string()), None, true, TWO_VERSION_SUPPORTED)
+                                } else {
+                                    return (format!("{} Nextgen version", game_short_name.to_string()), None, true, TWO_VERSION_SUPPORTED)
+                                }
                             }
                         };
 
@@ -478,26 +502,28 @@ impl Dialogs {
                             let mut text = format!("{} Nextgen version", game_short_name);
                             if nextgen {
                                 debug!("Asset is Nextgen like installed mod");
-                                return (text, true, false, TWO_VERSION_SUPPORTED);
+                                return (text, Some(true), false, TWO_VERSION_SUPPORTED);
                             };
                             debug!("Asset is TDB but installed mod is nextgen");
                             set_label_for_download_switch(&mut text, "standard", "nextgen");
-                            return (text, false, false, TWO_VERSION_SUPPORTED);
+                            return (text, Some(false), false, TWO_VERSION_SUPPORTED);
                         };
 
                         let mut text = format!("{} Standard version", game_short_name);
                         if !nextgen {
                             debug!("Asset is TDB like installed mod");
-                            return (text, true, false, TWO_VERSION_SUPPORTED);
+                            return (text, Some(true), false, TWO_VERSION_SUPPORTED);
                         };
                         debug!("Asset is Nextgen but installed mod is TDB");
                         set_label_for_download_switch(&mut text, "nextgen", "standard");
-                        return (text, false, false, TWO_VERSION_SUPPORTED);
+                        return (text, Some(false), false, TWO_VERSION_SUPPORTED);
                     })
                     .unwrap_or_else(|| {
                         debug!("asset is not TDB nor Nextgen");
-                         (game_short_name.to_string(), true, false, false) 
+                         (game_short_name.to_string(), Some(true), false, false) 
                     });
+
+                // ifs are needed because we want to assign it only for true 
                 if mod_is_probably_not_installed {
                     is_any_game_support_sec_version_but_mod_is_not_installed = mod_is_probably_not_installed;
                 }

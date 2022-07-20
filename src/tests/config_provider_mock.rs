@@ -23,6 +23,12 @@ pub mod mock_conf_provider {
         versions = [["v1.71-abd3145"]]
         nextgen = true
         runtime = "OpenXR"
+        
+        [RE3]
+        location = "D:/steam/games/RE3"
+        versions = [["v1.71-abd3145"]]
+        nextgen = false
+        runtime = "OpenXR"
 
         [RE7]
         location = "D:/steam/games/RE7"

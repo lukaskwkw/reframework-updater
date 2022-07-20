@@ -15,7 +15,9 @@ pub fn find_game_conf_by_steam_id<'a>(
     let (game_short_name, game_config) = config
         .games
         .iter()
-        .find(|(_, conf)| conf.steamId.as_ref().unwrap() == steam_id)
+        .find(|(_, conf)| {
+            conf.steamId.as_ref().is_some() && conf.steamId.as_ref().unwrap() == steam_id
+        })
         .ok_or(Report::new(REvilManagerError::GameNotFoundForGivenSteamId(
             steam_id.to_string(),
         )))?;

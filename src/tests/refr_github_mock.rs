@@ -5,7 +5,7 @@ use self_update::update::ReleaseAsset;
 
 use self_update::update::Release;
 
-use crate::reframework_github::refr_github::GameShortName;
+use crate::reframework_github::refr_github::AssetsReport;
 use crate::reframework_github::refr_github::MockREFRGithub;
 use crate::DynResult;
 
@@ -22,7 +22,7 @@ mock!(
         pub fn download_release_asset(&self, release_asset: &ReleaseAsset) -> DynResult<&'static REFRGithub>;
         pub fn fetch_release(&self) -> DynResult<Release>;
         pub fn getRelease(&self) -> Option<&'static Release>;
-        pub fn getAssetsReport(&self) -> &'static HashMap<GameShortName, Vec<ReleaseAsset>>;
+        pub fn getAssetsReport(&self) -> &'static AssetsReport;
     }
 );
 
@@ -68,13 +68,29 @@ lazy_static! {
         );
 
         m.insert(
+            "RE3".to_string(),
+            [
+                ReleaseAsset {
+                    name: "RE3.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+                ReleaseAsset {
+                    name: "RE3_TDBXXX.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+            ]
+            .to_vec(),
+        );
+
+        m.insert(
             "RE8".to_string(),
             [ReleaseAsset {
-                name: "RE8".to_string(),
+                name: "RE8.zip".to_string(),
                 download_url: "dupa_url".to_string(),
             }]
             .to_vec(),
         );
+
         m
     };
     static ref REFRGithub_STATIC: REFRGithub = REFRGithub::default();
