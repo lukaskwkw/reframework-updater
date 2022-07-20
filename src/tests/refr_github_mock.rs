@@ -39,8 +39,38 @@ lazy_static! {
         let mut m = HashMap::new();
         m.insert(
             "RE7".to_string(),
+            [
+                ReleaseAsset {
+                    name: "RE7.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+                ReleaseAsset {
+                    name: "RE7_TDBXXX.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+            ]
+            .to_vec(),
+        );
+
+        m.insert(
+            "RE2".to_string(),
+            [
+                ReleaseAsset {
+                    name: "RE2.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+                ReleaseAsset {
+                    name: "RE2_TDBXXX.zip".to_string(),
+                    download_url: "dupa_url".to_string(),
+                },
+            ]
+            .to_vec(),
+        );
+
+        m.insert(
+            "RE8".to_string(),
             [ReleaseAsset {
-                name: "dupa".to_string(),
+                name: "RE8".to_string(),
                 download_url: "dupa_url".to_string(),
             }]
             .to_vec(),
@@ -55,7 +85,7 @@ pub fn prepare_refr_github_mock_and_get_constr() -> (
     fn(&str, &str) -> Box<dyn ManageGithub<REFRGithub>>,
 ) {
     let ctx = MockREFRGithub::new_context();
-    ctx.expect().return_once(|_, _| {
+    ctx.expect().returning(|_, _| {
         let mut mock = MockManageGithubM::new();
 
         unsafe {

@@ -141,7 +141,8 @@ fn map_to_version(path: impl AsRef<Path>) -> Option<String> {
         }) {
         Ok(it) => it,
         Err(err) => {
-            warn!("{:?}", err);
+            warn!("{}", err);
+            debug!("{:?}", err);
             return None;
         }
     };
