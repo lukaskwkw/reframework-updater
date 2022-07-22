@@ -7,10 +7,8 @@ use std::{
     error::Error,
     fmt::{Display, Formatter},
     fs,
-    path::PathBuf,
 };
 
-use error_stack::IntoReport;
 use log::{info, trace};
 use reqwest::header;
 use self_update::{

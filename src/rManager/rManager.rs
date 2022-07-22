@@ -7,7 +7,6 @@ use std::{
     process::{self},
 };
 
-use std::path::Path;
 use crate::{
     args::RunAfter,
     dialogs::{
@@ -35,6 +34,7 @@ use crate::{
     DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE,
     REPO_OWNER, STANDARD_TYPE_QUALIFIER,
 };
+use std::path::Path;
 
 #[cfg(test)]
 use crate::unzip::unzip::mock_unzip as unzip;
@@ -331,28 +331,44 @@ impl REvilThings for REvilManager {
     }
 
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self> {
-        let results: Vec<ResultManagerErr<()>> = self
+        let results: Vec<(String, ResultManagerErr<()>)> = self
             .state
             .selected_assets
             .iter()
-            .map(|asset| -> ResultManagerErr<()> {
-                self.github_release_manager
+            .map(|asset| -> (String, ResultManagerErr<()>) {
+                let asset_name_result = self
+                    .github_release_manager
                     .as_ref()
                     .unwrap()
                     .download_release_asset(asset)
-                    .or_else(|err| {
-                        Err(Report::new(REvilManagerError::default())).attach_printable(format!(
-                            "Error during downloading asset {} Error {:?}",
-                            asset.name, err
-                        ))
-                    })?;
-                Ok(())
+                    .map_err(|err| {
+                        Err(Report::new(REvilManagerError::DownloadAssetError(
+                            asset.name.clone(),
+                        )))
+                        .attach_printable(format!("{:?}", err))
+                    })
+                    .map(|_| (asset.name.to_string(), Ok(())))
+                    .unwrap_or_else(|err| (asset.name.to_string(), err));
+
+                asset_name_result
             })
             .collect();
 
-        results.iter().for_each(|result| {
+        results.iter().for_each(|(asset_name, result)| {
             result.as_ref().unwrap_or_else(|err| {
-                error!("{:?}", err);
+                let pos = self
+                    .state
+                    .selected_assets
+                    .iter()
+                    .position(|asset| &asset.name == asset_name)
+                    .unwrap();
+                // if during download error occurs we don't want to do nothing with this asset later
+                self.state.selected_assets.remove(pos);
+                warn!(
+                    "Update error for {} Err: {} Mod has not been updated!",
+                    asset_name, err
+                );
+                debug!("{:?}", err);
                 &()
             });
         });
@@ -385,8 +401,13 @@ impl REvilThings for REvilManager {
             .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
 
         if unzip_skip_fun.is_some() {
-            unzip(&path_to_zip, &location, unzip_skip_fun)
-                .change_context(REvilManagerError::UnzipError)?;
+            unzip(&path_to_zip, &location, unzip_skip_fun).change_context(
+                REvilManagerError::UnzipError(format!(
+                    "Couldn't unzip asset {}: for {} game.",
+                    path_to_zip.display(),
+                    game_short_name
+                )),
+            )?;
             return Ok(self);
         };
         let closure = game_config
@@ -402,34 +423,59 @@ impl REvilThings for REvilManager {
                 return Box::new(should_skip);
             });
 
-        unzip(path_to_zip, location, Some(closure))
-            .change_context(REvilManagerError::UnzipError)?;
+        unzip(&path_to_zip, location, Some(closure)).change_context(
+            REvilManagerError::UnzipError(format!(
+                "Couldn't unzip asset {}: for {} game",
+                path_to_zip.display(),
+                game_short_name
+            )),
+        )?;
         Ok(self)
     }
 
     fn unzip_updates(&mut self) -> &mut Self {
         let selected_assets = &self.state.selected_assets;
-        selected_assets.iter().for_each(|asset| {
-            let game_short_name = match get_game_short_name_from_asset(asset) {
-                Ok(it) => it,
-                Err(err) => {
-                    error!("{:#?}", err);
-                    return;
-                }
-            };
+        let results: Vec<(String, ResultManagerErr<()>)> = selected_assets
+            .iter()
+            .map(|asset| {
+                let game_short_name = match get_game_short_name_from_asset(asset) {
+                    Ok(it) => it,
+                    Err(err) => {
+                        error!("{:#?}", err);
+                        return (asset.name.to_string(), Err(err));
+                    }
+                };
 
-            let game_short_name = game_short_name;
-            self.unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)
-                .unwrap_or_else(|err| {
-                    error!(
-                        "Couldn't unzip asset {}: for {} game. Err {}",
-                        asset.name, game_short_name, err
-                    );
-                    self
-                });
-            ()
+                let game_short_name = game_short_name;
+                let asset_name_result = self
+                    .unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)
+                    .map_err(|err| err)
+                    .map(|_| (asset.name.to_string(), Ok(())))
+                    .unwrap_or_else(|err| (asset.name.to_string(), Err(err)));
+
+                asset_name_result
+            })
+            .collect();
+
+        results.iter().for_each(|(asset_name, result)| {
+            result.as_ref().unwrap_or_else(|err| {
+                let pos = self
+                    .state
+                    .selected_assets
+                    .iter()
+                    .position(|asset| &asset.name == asset_name)
+                    .unwrap();
+
+                // if during error occurs we don't want to do nothing with this asset later
+                self.state.selected_assets.remove(pos);
+                warn!(
+                    "Unzip error for {} Err: {} Mod has not been changed!",
+                    asset_name, err
+                );
+                debug!("{:?}", err);
+                &()
+            });
         });
-
         return self;
     }
 
@@ -450,10 +496,6 @@ impl REvilThings for REvilManager {
         let results: Vec<ResultManagerErr<()>> = selected_assets
             .iter()
             .map(|asset| -> ResultManagerErr<()> {
-                // TODO add check if there was error for selected_assets during unzip or download
-                // for particular asset as data saved later would be invalid maybe selected_assets should have additional field
-                // like error with error type in there
-                // for TDB assets STANDARD_TYPE_QUALIFIER is used and for rest games included nextgens ".zip"
                 let game_short_name = get_game_short_name_from_asset(&asset)?;
                 info!("After unzip work for {} - start", game_short_name);
 
@@ -686,9 +728,12 @@ impl REvilThings for REvilManager {
 
     fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
         let (game_short_name, game_config) = find_game_conf_by_steam_id(&self.config, steam_id)?;
+        info!("Before launch procedure - start");
         if game_config.versions.is_none() || game_config.version_in_use.is_none() {
-            info!("Do you have mod installed for? {}", game_short_name);
-            return Ok(());
+            error!("Do you have mod installed for? {}", game_short_name);
+            return Err(Report::new(REvilManagerError::ModIsNotInstalled(
+                game_short_name.to_string(),
+            )));
         }
         let maybe_vec = game_config
             .versions
@@ -705,7 +750,7 @@ impl REvilThings for REvilManager {
             version_vec = game_config.versions.as_ref().unwrap().first().unwrap();
         } else {
             info!(
-                "Getting runtime from {} version cache",
+                "Checking runtime for {} version",
                 game_config.version_in_use.as_ref().unwrap()
             );
             version_vec = maybe_vec.unwrap();
@@ -714,7 +759,6 @@ impl REvilThings for REvilManager {
             debug!("Mod version has no cache file");
             return Ok(());
         }
-        info!("Before launch procedure - start");
         let game_dir = game_config
             .location
             .as_ref()
