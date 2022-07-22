@@ -187,7 +187,9 @@ impl REvilThings for REvilManager {
             // we want check config.versions because maybe found new steam game and we don't want to
             // replace versions information for other games
             if local_config.version.is_some() && config.versions.is_none() {
-                config.versions = Some([[local_config.version.unwrap()].to_vec()].to_vec());
+                let local_ver = local_config.version.unwrap();
+                config.versions = Some([[local_ver.to_string()].to_vec()].to_vec());
+                config.version_in_use = Some(local_ver);
             }
             config.nextgen = local_config.nextgen;
         }
