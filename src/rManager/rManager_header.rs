@@ -1,21 +1,23 @@
 use std::{
     error::Error,
     ffi::OsStr,
-    fmt::{self, format},
+    fmt::{self},
 };
 
 use log::Level;
 use self_update::update::ReleaseAsset;
 
 use crate::{
-    refr_github::{ManageGithub, REFRGithub},
+    args::RunAfter,
+    dialogs::{dialogs::Ask, dialogs_label::LabelOptions},
+    refr_github::{ManageGithub},
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{GameConfig, REvilConfig, SteamId, ShortGameName},
+        configStruct::{REvilConfig, ShortGameName, SteamId},
     },
     utils::local_version::LocalFiles,
-    DynResult, dialogs::{dialogs::{Ask}, dialogs_label::LabelOptions}, args::RunAfter,
+    DynResult,
 };
 use error_stack::Result;
 
@@ -60,7 +62,10 @@ pub trait REvilThings {
     where
         F: Fn(&OsStr) -> bool;
     fn unzip_updates(&mut self) -> &mut Self;
-    fn after_unzip_work(&mut self, options: Option<Vec<AfterUnzipOption>>) -> Result<&mut Self, REvilManagerError>;
+    fn after_unzip_work(
+        &mut self,
+        options: Option<Vec<AfterUnzipOption>>,
+    ) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self>;
@@ -96,7 +101,9 @@ pub enum REvilManagerError {
     GameLocationMissing,
     ModRuntimeIsNone(String),
     GetLocalPathToCacheErr,
-    UnzipError,
+    UnzipError(String),
+    DownloadAssetError(String),
+    ModIsNotInstalled(String),
     ErrorRestartingProgram,
     SaveConfigError,
     LoadConfigError,
@@ -122,7 +129,7 @@ impl fmt::Display for REvilManagerError {
                 write!(f, "ReleaseManagerIsNotInitialized")
             }
             REvilManagerError::GameLocationMissing => write!(f, "GameLocationMissing"),
-            REvilManagerError::UnzipError => write!(f, "UnzipError"),
+            REvilManagerError::UnzipError(more) => write!(f, "UnzipError {}", more),
             REvilManagerError::SaveConfigError => write!(f, "SaveConfigError"),
             REvilManagerError::LoadConfigError => write!(f, "LoadConfigError"),
             REvilManagerError::Other => write!(f, "Other"),
@@ -139,6 +146,10 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::GetLocalPathToCacheErr => write!(f, "GetLocalPathToCacheErr"),
             REvilManagerError::ModRuntimeIsNone(game) => write!(f, "ModRuntimeIsNone for {}", game),
             REvilManagerError::ErrorRestartingProgram => write!(f, "ErrorRestartingProgram"),
+            REvilManagerError::DownloadAssetError(asset_name) => {
+                write!(f, "During downloading {} asset there was an error", asset_name)
+            }
+            REvilManagerError::ModIsNotInstalled(short_name) => write!(f, "Mod is not installed for {}", short_name),
         }
     }
 }
