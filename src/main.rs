@@ -25,6 +25,7 @@ mod utils {
     pub mod version_parser;
     pub mod find_game_conf_by_steam_id;
     pub mod is_asset_tdb;
+    pub mod restart_program;
 }
 
 mod steam;
@@ -104,5 +105,5 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     thread::sleep(secs);
     Ok(())
 }
-// TODO implement back functionality
-// TODO implement not run game after any switching option
+// TODO maybe implement back functionality
+// TODO maybe implement not run game after any switching option

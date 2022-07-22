@@ -33,12 +33,18 @@ pub struct REvilManager {
     pub state: REvilManagerState,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub enum AfterUnzipOption {
+    SkipSettingVersion,
+    SkipRemovingFromRequiredUpdates,
+}
+
 pub trait REvilThings {
     fn load_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn attach_logger(&mut self) -> ResultManagerErr<&mut Self>;
     fn load_games_from_steam(&mut self) -> ResultManagerErr<&mut Self>;
     fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
-    fn get_local_settings_per_game(&mut self) -> &mut Self;
+    fn get_local_settings_per_game_and_amend_current_ones(&mut self) -> &mut Self;
     fn generate_ms_links(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn pick_one_game_from_report(&mut self) -> ResultManagerErr<&mut Self>;
@@ -54,7 +60,7 @@ pub trait REvilThings {
     where
         F: Fn(&OsStr) -> bool;
     fn unzip_updates(&mut self) -> &mut Self;
-    fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn after_unzip_work(&mut self, options: Option<Vec<AfterUnzipOption>>) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self>;
@@ -91,6 +97,7 @@ pub enum REvilManagerError {
     ModRuntimeIsNone(String),
     GetLocalPathToCacheErr,
     UnzipError,
+    ErrorRestartingProgram,
     SaveConfigError,
     LoadConfigError,
     #[default]
@@ -131,6 +138,7 @@ impl fmt::Display for REvilManagerError {
             }
             REvilManagerError::GetLocalPathToCacheErr => write!(f, "GetLocalPathToCacheErr"),
             REvilManagerError::ModRuntimeIsNone(game) => write!(f, "ModRuntimeIsNone for {}", game),
+            REvilManagerError::ErrorRestartingProgram => write!(f, "ErrorRestartingProgram"),
         }
     }
 }

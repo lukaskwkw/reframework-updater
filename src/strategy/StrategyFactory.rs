@@ -1,7 +1,7 @@
 use crate::{
     args::{parse_args, RunAfter},
-    rManager::rManager_header::REvilManager,
     rManager::rManager_header::REvilThings,
+    rManager::rManager_header::{AfterUnzipOption, REvilManager},
     ARGS,
 };
 use error_stack::ResultExt;
@@ -37,7 +37,7 @@ impl Strategy for CheckUpdateAndRunTheGame {
             .and_then(|this| this.download_REFramework_update())
             .unwrap()
             .unzip_updates()
-            .after_unzip_work()
+            .after_unzip_work(None)
             .and_then(|this| this.save_config())
             .and_then(|this| this.ask_for_game_decision_if_needed())
             .unwrap();
@@ -75,7 +75,7 @@ impl Strategy for CheckAndRest {
             .and_then(|this| this.download_REFramework_update())
             .unwrap()
             .unzip_updates()
-            .after_unzip_work()
+            .after_unzip_work(None)
             .and_then(|this| this.save_config())
             .unwrap();
         AskLastOptions::run(manager);
@@ -111,7 +111,7 @@ impl Strategy for DefaultRoute {
         manager.or_log_err(|this| this.generate_ms_links(), Level::Warn);
         // only check local files again when a config failed to be loaded or a steam found the new game
         if manager.state.config_loading_error_ocurred || manager.state.new_steam_game_found {
-            manager.get_local_settings_per_game();
+            manager.get_local_settings_per_game_and_amend_current_ones();
         };
 
         CheckAndRest::run(manager);

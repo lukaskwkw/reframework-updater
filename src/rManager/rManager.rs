@@ -4,14 +4,10 @@ use std::{
     env,
     ffi::OsStr,
     fs,
-    process::{self, Command},
+    process::{self},
 };
 
-// #[cfg(not(test))]
 use std::path::Path;
-// #[cfg(test)]
-// use crate::tests::integration::tests::Path;
-
 use crate::{
     args::RunAfter,
     dialogs::{
@@ -34,10 +30,10 @@ use crate::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, init_logger::init_logger,
         is_asset_tdb::is_asset_tdb, local_version::LocalFiles, progress_style,
-        version_parser::isRepoVersionNewer,
+        restart_program::restart_program, version_parser::isRepoVersionNewer,
     },
-    DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
-    STANDARD_TYPE_QUALIFIER,
+    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE,
+    REPO_OWNER, STANDARD_TYPE_QUALIFIER,
 };
 
 #[cfg(test)]
@@ -51,6 +47,8 @@ use self_update::update::ReleaseAsset;
 use std::time::Duration;
 
 use indicatif::ProgressBar;
+
+use super::rManager_header::AfterUnzipOption;
 
 pub static SWITCH_IDENTIFIER: &str = "switch";
 
@@ -171,7 +169,8 @@ impl REvilThings for REvilManager {
         todo!()
     }
 
-    fn get_local_settings_per_game(&mut self) -> &mut Self {
+    // TODO maybe divide it into two functions or find better name for function
+    fn get_local_settings_per_game_and_amend_current_ones(&mut self) -> &mut Self {
         info!("Checking local mod config per game");
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(80).as_secs());
@@ -185,7 +184,7 @@ impl REvilThings for REvilManager {
                 .get_local_report_for_game(game_location, short_name);
             config.runtime = local_config.runtime;
 
-            // check fo config.versions  is called because maybe found new steam game and we don't want to
+            // we want check config.versions because maybe found new steam game and we don't want to
             // replace versions information for other games
             if local_config.version.is_some() && config.versions.is_none() {
                 config.versions = Some([[local_config.version.unwrap()].to_vec()].to_vec());
@@ -377,7 +376,7 @@ impl REvilThings for REvilManager {
             REvilManagerError::ReleaseManagerIsNotInitialized,
         ))?;
         let release = manager.getRelease();
-        let path = get_local_path_to_cache_folder(release, version)
+        let path_to_zip = get_local_path_to_cache_folder(release, version)
             .map(|path| path.join(file_name))
             .or(Err(Report::new(REvilManagerError::GetLocalPathToCacheErr)))?;
         let location = game_config
@@ -386,7 +385,7 @@ impl REvilThings for REvilManager {
             .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
 
         if unzip_skip_fun.is_some() {
-            unzip(&path, &location, unzip_skip_fun)
+            unzip(&path_to_zip, &location, unzip_skip_fun)
                 .change_context(REvilManagerError::UnzipError)?;
             return Ok(self);
         };
@@ -403,7 +402,8 @@ impl REvilThings for REvilManager {
                 return Box::new(should_skip);
             });
 
-        unzip(path, location, Some(closure)).change_context(REvilManagerError::UnzipError)?;
+        unzip(path_to_zip, location, Some(closure))
+            .change_context(REvilManagerError::UnzipError)?;
         Ok(self)
     }
 
@@ -433,7 +433,10 @@ impl REvilThings for REvilManager {
         return self;
     }
 
-    fn after_unzip_work(&mut self) -> Result<&mut Self, REvilManagerError> {
+    fn after_unzip_work(
+        &mut self,
+        options: Option<Vec<AfterUnzipOption>>,
+    ) -> Result<&mut Self, REvilManagerError> {
         let selected_assets = &self.state.selected_assets;
         let manager = self.github_release_manager.as_ref().ok_or(Report::new(
             REvilManagerError::ReleaseManagerIsNotInitialized,
@@ -454,11 +457,23 @@ impl REvilThings for REvilManager {
                 let game_short_name = get_game_short_name_from_asset(&asset)?;
                 info!("After unzip work for {} - start", game_short_name);
 
-                // remove game from req_update_games vec as it is already updated!
-                remove_game_from_update_needed_ones(
-                    self.state.games_that_require_update.as_mut(),
-                    game_short_name,
-                );
+                if options.is_none()
+                    || options.is_some()
+                        && options
+                            .as_ref()
+                            .unwrap()
+                            .iter()
+                            .find(|option| {
+                                **option == AfterUnzipOption::SkipRemovingFromRequiredUpdates
+                            })
+                            .is_none()
+                {
+                    // remove game from req_update_games vec as it is already updated!
+                    remove_game_from_update_needed_ones(
+                        self.state.games_that_require_update.as_mut(),
+                        game_short_name,
+                    );
+                }
 
                 let game_config = self
                     .config
@@ -471,12 +486,23 @@ impl REvilThings for REvilManager {
                     ))?;
 
                 // add version from asset to array or create new array with the asset version
-                add_asset_ver_to_game_conf_ver(game_config, version, asset);
+                if options.is_none()
+                    || options.is_some()
+                        && options
+                            .as_ref()
+                            .unwrap()
+                            .iter()
+                            .find(|option| **option == AfterUnzipOption::SkipSettingVersion)
+                            .is_none()
+                {
+                    add_asset_ver_to_game_conf_ver(game_config, version, asset);
+                }
 
                 // set NEXTGEN accordingly to an asset but only for the supported games
-                is_asset_tdb(game_short_name, asset)
-                    .map(|does| game_config.nextgen = Some(!does))
-                    .unwrap_or_default();
+                match is_asset_tdb(game_short_name, asset) {
+                    Some(is_tdb) => game_config.nextgen = Some(!is_tdb),
+                    None => (),
+                };
 
                 // remove second, not needed runtime file as for example when switching between different runtime versions
                 // second file may persists therefore blocking loading OpenXR runtime from loading
@@ -506,6 +532,7 @@ impl REvilThings for REvilManager {
                 &()
             });
         });
+        self.state.selected_assets.drain(..);
 
         return Ok(self);
     }
@@ -536,28 +563,65 @@ impl REvilThings for REvilManager {
 
         use SwitchActionReport::*;
         match what_next {
-            UnzipSaveAndExit(short_name, second_asset_name) => {
+            ToggleNUnzipSaveRunThenExit(short_name, second_asset_name) => {
+                self.toggle_nextgen(&short_name);
                 self.unzip_update::<fn(&OsStr) -> bool>(
                     &short_name,
                     &second_asset_name,
                     None,
                     None,
                 )?;
+                // it is required to populate selected_assets for after_unzip_work
+                self.state.selected_assets.push(ReleaseAsset {
+                    download_url: "".to_string(),
+                    name: second_asset_name,
+                });
+                self.after_unzip_work(Some(
+                    [
+                        AfterUnzipOption::SkipSettingVersion,
+                        AfterUnzipOption::SkipRemovingFromRequiredUpdates,
+                    ]
+                    .to_vec(),
+                ))?;
                 self.save_config()?;
-                process::exit(0);
+                self.state.selected_game_to_launch =
+                    Some(get_steam_id_by_short_name(&self.config.games, &short_name).to_string());
+                return Ok(self);
             }
-            SaveAndRunThenExit(short_name, path) => {
+            ToggleNSetSwitchSaveRunThenExit(short_name) => {
+                self.toggle_nextgen(&short_name);
+                self.set_switch_as_version(&short_name);
                 self.save_config()?;
-                if cfg!(target_os = "windows") {
-                    Command::new(path)
-                        .args(["-r", &format!("{:?}", run_after), "--one", &short_name])
-                        .spawn()
-                        .expect("failed to execute process");
-                    process::exit(0);
-                };
+                restart_program(run_after, short_name)
+                    .report()
+                    .change_context(REvilManagerError::ErrorRestartingProgram)?;
+            }
+            RemoveNonexistentToggleNRunThenExit(game_short_name, second_asset_name) => {
+                self.toggle_nextgen(&game_short_name);
+                let game_conf = self.config.games.get_mut(&game_short_name).unwrap();
+                let first_set = game_conf.versions.as_mut().unwrap().first_mut().unwrap();
+                let position = first_set
+                    .iter()
+                    .skip(1)
+                    .position(|asset_name| *asset_name == second_asset_name)
+                    .unwrap();
+                first_set.remove(position);
+
+                self.set_switch_as_version(&game_short_name);
+                self.save_config()?;
+                restart_program(run_after, game_short_name)
+                    .report()
+                    .change_context(REvilManagerError::ErrorRestartingProgram)?;
             }
             Early => {
                 return Ok(self);
+            }
+            ToggleNSaveRunExit(game_short_name) => {
+                self.toggle_nextgen(&game_short_name);
+                self.save_config()?;
+                restart_program(run_after, game_short_name)
+                    .report()
+                    .change_context(REvilManagerError::ErrorRestartingProgram)?;
             }
         }
         Ok(self)
@@ -580,15 +644,24 @@ impl REvilThings for REvilManager {
                     "short_name- {} asset_name- {} version-{}",
                     short_name, asset_name, version
                 );
-                // TODO set nextgen accordingly to new from zip archive
-                // TODO Maybe consider using after_unzip_work function but remember to add this to selected_assets
-                // TODO consider the same for ask_for_switch_type_decision to use after_unzip_work function it will be safer that way
                 self.unzip_update::<fn(&OsStr) -> bool>(
                     &short_name,
                     &asset_name,
                     Some(&version),
                     None,
                 )?;
+                // it is required to populate selected_assets for after_unzip_work
+                self.state.selected_assets.push(ReleaseAsset {
+                    download_url: "".to_string(),
+                    name: asset_name,
+                });
+                self.after_unzip_work(Some(
+                    [
+                        AfterUnzipOption::SkipSettingVersion,
+                        AfterUnzipOption::SkipRemovingFromRequiredUpdates,
+                    ]
+                    .to_vec(),
+                ))?;
                 match self.config.games.get_mut(&short_name) {
                     Some(game_config) => game_config.version_in_use = Some(version.to_string()),
                     None => (),
@@ -613,11 +686,30 @@ impl REvilThings for REvilManager {
 
     fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
         let (game_short_name, game_config) = find_game_conf_by_steam_id(&self.config, steam_id)?;
-        if game_config.versions.is_none() {
-            debug!("Version vector is empty for {}", game_short_name);
+        if game_config.versions.is_none() || game_config.version_in_use.is_none() {
+            info!("Do you have mod installed for? {}", game_short_name);
             return Ok(());
         }
-        let version_vec = game_config.versions.as_ref().unwrap().first().unwrap();
+        let maybe_vec = game_config
+            .versions
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|ver_set| {
+                ver_set.first().unwrap() == game_config.version_in_use.as_ref().unwrap()
+            });
+
+        let mut version_vec: &Vec<String> = &Vec::new();
+        if maybe_vec.is_none() {
+            warn!("Your version is not in cache anymore. Will try to get runtime from latest instead.");
+            version_vec = game_config.versions.as_ref().unwrap().first().unwrap();
+        } else {
+            info!(
+                "Getting runtime from {} version cache",
+                game_config.version_in_use.as_ref().unwrap()
+            );
+            version_vec = maybe_vec.unwrap();
+        }
         if version_vec.len() < 2 {
             debug!("Mod version has no cache file");
             return Ok(());
@@ -633,8 +725,26 @@ impl REvilThings for REvilManager {
         if !game_dir.join(runtime.as_local_dll()).exists() {
             let should_skip_all_except = |file: &OsStr| file != OsStr::new(&runtime.as_local_dll());
             let ver = &version_vec[0];
-            // TODO consider extracting from suitable mod type i.e. for standard use TDB asset, for nextgen i.e. RE7.zip
-            let file_name = &version_vec[1];
+
+            let file_name = version_vec.iter().skip(1).find(|name| {
+                is_asset_tdb(
+                    &game_short_name,
+                    &ReleaseAsset {
+                        name: name.to_string(),
+                        ..Default::default()
+                    },
+                )
+                .and_then(|is_tdb| match game_config.nextgen {
+                    Some(nextgen) => Some((is_tdb, nextgen)),
+                    None => return None,
+                })
+                .and_then(|(is_tdb, nextgen)| Some(((is_tdb && !nextgen) || (!is_tdb && nextgen))))
+                // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
+                .unwrap_or(true)
+            });
+
+            // TODO should be safe to unwrap below but maybe some tests?
+            let file_name = file_name.unwrap();
 
             self.unzip_update(
                 game_short_name,
@@ -701,6 +811,26 @@ impl REvilThings for REvilManager {
 }
 
 impl REvilManager {
+    fn toggle_nextgen(&mut self, short_name: &String) {
+        let game_conf = self.config.games.get_mut(short_name).unwrap();
+        let nextgen = game_conf.nextgen.as_mut().unwrap();
+        *nextgen = !*nextgen;
+    }
+
+    fn set_switch_as_version(&mut self, short_name: &String) {
+        let versions = self
+            .config
+            .games
+            .get_mut(short_name)
+            .unwrap()
+            .versions
+            .as_mut()
+            .unwrap();
+        let first_set = versions.first_mut().unwrap();
+        let version = first_set.first_mut().unwrap();
+        *version = SWITCH_IDENTIFIER.to_string();
+    }
+
     fn set_games_that_require_update(&mut self) -> ResultManagerErr<()> {
         let manager = self.github_release_manager.as_mut().ok_or(Report::new(
             REvilManagerError::ReleaseManagerIsNotInitialized,
@@ -808,11 +938,10 @@ fn set_game_from_report_as_selected_to_download(
 }
 
 fn remove_game_from_update_needed_ones(req_update_games: &mut Vec<String>, game_short_name: &str) {
-    req_update_games
-        .iter()
-        .position(|sn| sn == game_short_name)
-        .map(|pos| req_update_games.remove(pos))
-        .unwrap_or_default();
+    match req_update_games.iter().position(|sn| sn == game_short_name) {
+        Some(pos) => req_update_games.remove(pos),
+        None => return (),
+    };
 }
 
 fn get_game_short_name_from_asset(asset: &ReleaseAsset) -> ResultManagerErr<&str> {
