@@ -1,7 +1,7 @@
 #[cfg(test)]
 use mockall::automock;
 
-use std::{collections::HashMap, env, error::Error, path::PathBuf};
+use std::{collections::HashMap, error::Error};
 
 use dialoguer::{theme::ColorfulTheme, Select};
 use error_stack::{Report, Result, ResultExt};
@@ -10,16 +10,15 @@ use self_update::update::ReleaseAsset;
 
 use crate::{
     dialogs::dialogs_label::{LabelOptions, SWITCH_RUNTIME_PART},
-    rManager::rManager::SWITCH_IDENTIFIER,
     rManager::rManager_header::{
-        REvilManager, REvilManagerError, REvilManagerState, ResultManagerErr, SORT_DETERMINER,
+        REvilManager, REvilManagerState, ResultManagerErr, SORT_DETERMINER,
     },
     tomlConf::configStruct::{REvilConfig, ShortGameName, SteamId},
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, is_asset_tdb::is_asset_tdb,
     },
-    STANDARD_TYPE_QUALIFIER, reframework_github::refr_github::AssetsReport,
+    STANDARD_TYPE_QUALIFIER, reframework_github::refr_github::AssetsReport, GAMES_NEXTGEN_SUPPORT,
 };
 
 #[derive(Debug, Default)]
@@ -69,8 +68,10 @@ impl Dialogs {
 }
 type SecondAssetName = String;
 pub enum SwitchActionReport {
-    UnzipSaveAndExit(ShortGameName, SecondAssetName),
-    SaveAndRunThenExit(ShortGameName, PathBuf),
+    ToggleNSaveRunExit(ShortGameName),
+    ToggleNUnzipSaveRunThenExit(ShortGameName, SecondAssetName),
+    RemoveNonexistentToggleNRunThenExit(ShortGameName, SecondAssetName),
+    ToggleNSetSwitchSaveRunThenExit(ShortGameName),
     Early,
 }
 use LabelOptions::*;
@@ -148,7 +149,7 @@ impl Ask for Dialogs {
         }
 
         let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
-        // let conf = config;
+        
         config.games.iter().for_each(|(short_name, game)| {
             game.versions
                 .as_ref()
@@ -173,6 +174,8 @@ impl Ask for Dialogs {
                     "Run {} - Runtime <{:?}>",
                     short_name,
                     // TODO for games that don't have mod unpacked this panic! Fix it as well one above
+                    // but this should be fixed only if supporting when steam is broken 
+                    // as runtime should be populated after steam detection
                     game.runtime.as_ref().unwrap()
                 ),
                 game.steamId.as_ref().unwrap(),
@@ -316,6 +319,20 @@ impl Ask for Dialogs {
             .games
             .iter()
             .filter_map(|(short_name, game)| {
+                if !GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
+                    debug!("Game doesn't support both versions {}", short_name);
+                    return None;
+                }
+                if game.versions.is_none() || game.version_in_use.is_none() {
+                    info!("Is mod installed for {}?", short_name);
+                    return None;
+                }
+                if game.versions.as_ref().unwrap().first().unwrap().first().unwrap() != game.version_in_use.as_ref().unwrap() {
+                    info!(r"Switch type decision only supports latest cached versions.
+                     If you want to switch to older version then use load from cache and select appropriate one.
+                      Game {}", short_name);
+                    return None;
+                }
                 let label = game.nextgen.map(|nextgen| {
                     if nextgen {
                         SwitchToStandard(short_name.to_string()).to_label()
@@ -346,14 +363,12 @@ impl Ask for Dialogs {
             }
             SwitchToStandard(short_name) | SwitchToNextgen(short_name) => {
                 debug!("Selected -> {:#?}", short_name);
-                let game_config = config.games.get_mut(&short_name).unwrap();
-                let nextgen = game_config.nextgen.as_ref().unwrap();
-                game_config.nextgen = Some(!nextgen);
-
+                let game_config = config.games.get(&short_name).unwrap();
+                
                 if !state.games_that_require_update.contains(&short_name) {
                     let next_gen = game_config.nextgen.unwrap();
-                    let versions = game_config.versions.as_mut().unwrap();
-                    let first_set = versions.first_mut().unwrap();
+                    let versions = game_config.versions.as_ref().unwrap();
+                    let first_set = versions.first().unwrap();
 
                     let second_asset_name = first_set.iter().skip(1).find(|name| {
                         is_asset_tdb(
@@ -363,32 +378,29 @@ impl Ask for Dialogs {
                                 ..Default::default()
                             },
                         )
-                        .map(|is_tdb| ((is_tdb && !next_gen) || (!is_tdb && next_gen)))
+                        // we want other type so condition below has to be different than usually
+                        .map(|is_tdb| ((is_tdb && next_gen) || (!is_tdb && !next_gen)))
                         .unwrap_or_default()
                     });
 
                     if second_asset_name.is_some() {
                         let second_asset_name = second_asset_name.unwrap();
                         debug!("preparing unzip for {}", second_asset_name);
-                        // TODO if asset from cache is missing then it will panic maybe make it to download asset instead?
-                        // but it requires first removing it from versions, saving config and running process again
-                        // TODO change it to either launch the game or back to previous section after ok
-                        return Ok(UnzipSaveAndExit(short_name, second_asset_name.clone()));
+                        let path_to_zip = get_local_path_to_cache_folder(None, Some(&first_set[0]))
+                            .map(|path| path.join(second_asset_name))
+                            .or(Err(Report::new(DialogsErrors::Other)))?;
+                        if !path_to_zip.exists() {
+                            return Ok(RemoveNonexistentToggleNRunThenExit(short_name, second_asset_name.to_string()));
+                        }
+                        return Ok(ToggleNUnzipSaveRunThenExit(short_name, second_asset_name.clone()));
                     }
 
-                    let version = first_set.first_mut().unwrap();
-                    *version = SWITCH_IDENTIFIER.to_string();
                 } else {
                     debug!("Game {} requires update anyway", short_name);
+                    return Ok(ToggleNSaveRunExit(short_name));
                 }
-                let path = env::current_exe()
-                    .map(|path| path)
-                    .or_else(|err| {
-                        Err(Report::new(REvilManagerError::Other)
-                            .attach_printable(format!("current_exe {}", err)))
-                    })
-                    .change_context(DialogsErrors::Other)?;
-                return Ok(SaveAndRunThenExit(short_name, path));
+                
+                return Ok(ToggleNSetSwitchSaveRunThenExit(short_name));
             }
             _ => (),
         };
