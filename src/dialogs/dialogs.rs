@@ -37,7 +37,7 @@ impl std::fmt::Display for DialogsErrors {
 
 impl Error for DialogsErrors {}
 
-type ResultDialogsErr<T> = Result<T, DialogsErrors>;
+pub type ResultDialogsErr<T> = Result<T, DialogsErrors>;
 
 #[cfg_attr(test, automock)]
 pub trait Ask {
@@ -572,4 +572,4 @@ fn set_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_s
 }
 
 #[cfg(test)]
-mod dialog_tests;
+mod download_decision_tests;

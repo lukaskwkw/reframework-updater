@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug};
 
-pub type ConfigResult<T> = Result<T, ConfigError>;
-
 #[derive(Debug)]
 pub enum ConfigError {
     ConfigFileError,

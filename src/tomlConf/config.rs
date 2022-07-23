@@ -15,7 +15,7 @@ use super::configStruct::{
 };
 use super::utils::{deserialize, serialize};
 
-type ConfigResult<T> = Result<T, ConfigError>;
+pub type ConfigResult<T> = Result<T, ConfigError>;
 
 pub struct REvilConfigProvider {
     filename: String,

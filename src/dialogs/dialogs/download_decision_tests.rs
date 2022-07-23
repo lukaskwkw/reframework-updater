@@ -15,40 +15,21 @@ use crate::{
     rManager::rManager_header::REvilManagerState,
     tests::{
         config_provider_mock::mock_conf_provider::get_config_provider_mock,
-        refr_github_mock::{prepare_refr_github_mock_and_get_constr, MockManageGithubM},
+        refr_github_mock::MockManageGithubM,
     },
     tomlConf::{config::ConfigProvider, configStruct::REvilConfig},
     utils::init_logger::init_logger,
 };
 use std::sync::Once;
 
-static INIT: Once = Once::new();
-fn init() -> (
-    HashMap<String, Vec<ReleaseAsset>>,
-    REvilConfig,
-    REvilManagerState,
-    Box<Dialogs>,
-) {
-    INIT.call_once(|| {
-        // init_logger("debug"); // uncomment if need more data for debugging
-    });
-
-    let (ctx, refr_constr) = prepare_refr_github_mock_and_get_constr();
-    let refr_github = refr_constr("something", "anything");
-    let assets_report = refr_github.getAssetsReport().clone();
-    let config_provider = get_config_provider_mock() as Box<dyn ConfigProvider>;
-    let config = config_provider.load_from_file().unwrap();
-    let state: REvilManagerState = REvilManagerState::default();
-    let dialogs = Box::new(Dialogs);
-    (assets_report, config, state, dialogs)
-}
+mod init_dialogs_mock;
 
 use LabelOptions::*;
 
 #[test]
 fn for_4_games() {
     println!("Given 4 games to update, all different types of, should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -131,7 +112,7 @@ fn for_4_games() {
 #[test]
 fn for_4_games_and_chosen_prefer_standard_decision() {
     println!("Given 4 games to update, different types of, and chosen standard decision - should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -167,7 +148,7 @@ fn for_4_games_and_chosen_prefer_standard_decision() {
 #[test]
 fn for_4_games_and_chosen_prefer_nextgen_decision() {
     println!("Given 4 games to update, different types of, and chosen nextgen decision - should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -204,7 +185,7 @@ fn for_4_games_and_chosen_prefer_nextgen_decision() {
 #[test]
 fn for_2_games() {
     println!("Given 2 games to update, one can support nextgen second not");
-    let (assets_report, config, mut state, dialogs) = init();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
 
     state.games_that_require_update.push("RE2".to_string());
     state.games_that_require_update.push("RE8".to_string());
@@ -231,7 +212,7 @@ fn for_2_games() {
 #[test]
 fn for_1_game() {
     println!("Given 1 game to update not supporting nextgen version");
-    let (assets_report, config, mut state, dialogs) = init();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
 

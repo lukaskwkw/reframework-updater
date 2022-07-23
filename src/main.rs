@@ -42,6 +42,8 @@ mod tests {
     pub mod steam_mock;
     pub mod refr_github_mock;
     pub mod dialog_provider_mock;
+    pub mod local_provider_mock;
+    pub mod manager_mocks;
 }
 
 pub mod strategy {

@@ -49,7 +49,7 @@ pub trait REvilThings {
     fn get_local_settings_per_game_and_amend_current_ones(&mut self) -> &mut Self;
     fn generate_ms_links(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
-    fn pick_one_game_from_report(&mut self) -> ResultManagerErr<&mut Self>;
+    fn pick_one_game_from_report_and_set_as_selected(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;
     fn download_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn unzip_update<F: Fn(&OsStr) -> bool>(
@@ -72,7 +72,7 @@ pub trait REvilThings {
     fn load_from_cache_if_chosen(&mut self) -> ResultManagerErr<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
     fn self_update(&mut self) -> DynResult<&mut Self>;
-    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()>;
+    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<String>;
     fn launch_game(&mut self) -> ResultManagerErr<&mut Self>;
     fn bind(
         &mut self,
@@ -155,7 +155,7 @@ impl fmt::Display for REvilManagerError {
 }
 
 impl Error for REvilManagerError {}
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct REvilManagerState {
     pub skip_next: bool,
     pub games_that_require_update: Vec<ShortGameName>,

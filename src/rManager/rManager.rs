@@ -182,8 +182,9 @@ impl REvilThings for REvilManager {
             let local_config = self
                 .local_provider
                 .get_local_report_for_game(game_location, short_name);
-            config.runtime = local_config.runtime;
-
+            if !local_config.runtime.is_none() {
+                config.runtime = local_config.runtime;
+            }
             // we want check config.versions because maybe found new steam game and we don't want to
             // replace versions information for other games
             if local_config.version.is_some() && config.versions.is_none() {
@@ -275,14 +276,14 @@ impl REvilThings for REvilManager {
         // requires github_release_manager to be initialized
         self.set_games_that_require_update()?;
 
-        debug!(
+        info!(
             "games_that_require_update, {:?}",
             self.state.games_that_require_update
         );
         Ok(self)
     }
 
-    fn pick_one_game_from_report(&mut self) -> ResultManagerErr<&mut Self> {
+    fn pick_one_game_from_report_and_set_as_selected(&mut self) -> ResultManagerErr<&mut Self> {
         let game_short_name;
         let should_run_after;
         unsafe {
@@ -301,7 +302,7 @@ impl REvilThings for REvilManager {
             .games_that_require_update
             .contains(&game_short_name.to_string())
         {
-            info!("Update not required");
+            info!("Update not required for {}", game_short_name);
             return Ok(self);
         }
         set_game_from_report_as_selected_to_download(
@@ -728,11 +729,18 @@ impl REvilThings for REvilManager {
         todo!()
     }
 
-    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<()> {
+    fn before_launch_procedure(&self, steam_id: &String) -> ResultManagerErr<String> {
         let (game_short_name, game_config) = find_game_conf_by_steam_id(&self.config, steam_id)?;
         info!("Before launch procedure - start");
+        if game_config.runtime.is_none() {
+            warn!("Mod runtime for {} is None", game_short_name);
+            return Ok(game_short_name.to_string());
+        }
         if game_config.versions.is_none() || game_config.version_in_use.is_none() {
-            error!("Do you have mod installed for? {}", game_short_name);
+            error!(
+                "Do you have mod installed for? {} Please select one to download",
+                game_short_name
+            );
             return Err(Report::new(REvilManagerError::ModIsNotInstalled(
                 game_short_name.to_string(),
             )));
@@ -759,7 +767,7 @@ impl REvilThings for REvilManager {
         }
         if version_vec.len() < 2 {
             debug!("Mod version has no cache file");
-            return Ok(());
+            return Ok(game_short_name.to_string());
         }
         let game_dir = game_config
             .location
@@ -804,14 +812,14 @@ impl REvilThings for REvilManager {
         remove_second_runtime_file(game_config)?;
 
         info!("Before launch procedure - end");
-        Ok(())
+        Ok(game_short_name.to_string())
     }
 
     fn launch_game(&mut self) -> ResultManagerErr<&mut Self> {
         if let Some(steam_id) = &self.state.selected_game_to_launch {
-            self.before_launch_procedure(steam_id)?;
+            let game_short_name = self.before_launch_procedure(steam_id)?;
 
-            info!("Launching the game");
+            info!("Launching the game {}", game_short_name);
             self.steam_menago
                 .run_game_via_steam_manager(&steam_id)
                 .change_context(REvilManagerError::default())?
@@ -1098,7 +1106,90 @@ fn get_steam_id_by_short_name<'a>(
     let steam_id = game_config.steamId.as_ref().unwrap();
     steam_id
 }
-// #[test]
-// fn sort_test {
-// REvilManager::so
-// }
+#[cfg(test)]
+pub mod tests {
+    use crate::{
+        args::ArgsClap,
+        tests::{
+            config_provider_mock::mock_conf_provider::load_from_file_default_return_mock,
+            manager_mocks::init_manager_mocks,
+        },
+    };
+
+    use super::*;
+
+    fn init() -> REvilManager {
+        let (
+            mut steam_menago,
+            mut local_provider_mock,
+            dialogs,
+            mut config_provider_mock,
+            ctx,
+            mock_reft_constr,
+        ) = init_manager_mocks();
+        config_provider_mock
+            .expect_load_from_file()
+            .returning(load_from_file_default_return_mock());
+        let mut evil_manager = REvilManager::new(
+            config_provider_mock,
+            local_provider_mock,
+            steam_menago,
+            dialogs,
+            mock_reft_constr,
+        );
+        evil_manager.github_release_manager =
+            Some((evil_manager.refr_ctor)(&"praydog", &"nightly"));
+        evil_manager.load_config().unwrap();
+        evil_manager
+    }
+
+    #[test]
+    fn pick_one_game_from_report_and_set_as_selected_for_nextgen_tdb_game() {
+        ["RE2", "RE3"].to_vec().iter().for_each(|short_name| {
+            unsafe {
+                ARGS = Some(ArgsClap {
+                    level: ErrorLevel::info,
+                    one: short_name.to_string(),
+                    run: RunAfter::yes,
+                });
+            }
+            let mut evil_manager = init();
+            evil_manager
+                .state
+                .games_that_require_update
+                .push(short_name.to_string());
+            evil_manager
+                .pick_one_game_from_report_and_set_as_selected()
+                .unwrap();
+
+            if short_name == &"RE2" {
+                assert_eq!(evil_manager.state.selected_assets[0].name, "RE2.zip");
+            } else if short_name == &"RE3" {
+                assert_eq!(evil_manager.state.selected_assets[0].name, "RE3_TDBXXX.zip");
+            }
+        });
+    }
+
+    #[test]
+    fn pick_one_game_from_report_and_set_as_selected_for_single_type_game() {
+        unsafe {
+            ARGS = Some(ArgsClap {
+                level: ErrorLevel::info,
+                one: "RE8".to_string(),
+                run: RunAfter::yes,
+            });
+        }
+        let mut evil_manager = init();
+        evil_manager
+            .state
+            .games_that_require_update
+            .push("RE8".to_string());
+
+        // config mock is missing steam id for RE8 on purpose so adding manually here
+        evil_manager.config.games.get_mut("RE8").unwrap().steamId = Some("1196590".to_string());
+        evil_manager
+            .pick_one_game_from_report_and_set_as_selected()
+            .unwrap();
+        assert_eq!(evil_manager.state.selected_assets[0].name, "RE8.zip");
+    }
+}

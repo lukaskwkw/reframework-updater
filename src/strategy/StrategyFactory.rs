@@ -5,7 +5,7 @@ use crate::{
     ARGS,
 };
 use error_stack::ResultExt;
-use log::{info, warn, Level};
+use log::{info, error, warn, Level};
 
 pub struct StrategyFactory;
 
@@ -33,7 +33,7 @@ impl Strategy for CheckUpdateAndRunTheGame {
         EarlyLoad::run(manager);
         manager
             .check_for_REFramework_update()
-            .and_then(|this| this.pick_one_game_from_report())
+            .and_then(|this| this.pick_one_game_from_report_and_set_as_selected())
             .and_then(|this| this.download_REFramework_update())
             .unwrap()
             .unzip_updates()
@@ -51,7 +51,8 @@ impl Strategy for LaunchAndSave {
         manager
             .launch_game()
             .and_then(|this| this.save_config())
-            .unwrap();
+            .map(|_| ())
+            .unwrap_or_else(|err| error!("{:?}", err));
     }
 }
 

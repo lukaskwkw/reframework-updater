@@ -6,7 +6,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     fs,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}
 };
 
 use crate::{
@@ -23,6 +23,7 @@ const VERSION_FILENAME: &str = "reframework_revision.txt";
 
 pub struct LocalProvider;
 
+#[derive(Default)]
 pub struct LocalGameConfig {
     pub version: Option<String>,
     pub runtime: Option<Runtime>,
