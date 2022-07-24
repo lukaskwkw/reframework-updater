@@ -106,7 +106,9 @@ pub mod unzip {
                 use std::os::unix::fs::PermissionsExt;
 
                 if let Some(mode) = file.unix_mode() {
-                    fs::set_permissions(&final_path, fs::Permissions::from_mode(mode))?;
+                    fs::set_permissions(&final_path, fs::Permissions::from_mode(mode))
+                        .report()
+                        .change_context(UnzipError::set_permissions)?;
                 }
             }
         }
@@ -139,6 +141,7 @@ pub mod unzip {
         create_dir_all,
         file_create,
         io_copy,
+        set_permissions,
     }
 
     impl Display for UnzipError {
