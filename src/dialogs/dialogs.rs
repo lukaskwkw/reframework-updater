@@ -61,11 +61,7 @@ pub trait Ask {
 }
 
 pub struct Dialogs;
-impl Dialogs {
-    pub fn new() -> Self {
-        Self
-    }
-}
+
 type SecondAssetName = String;
 pub enum SwitchActionReport {
     ToggleNSaveRunExit(ShortGameName),
@@ -86,7 +82,7 @@ impl Ask for Dialogs {
             .prepare_decision_report(config, state, report)
             .change_context(DialogsErrors::Other)?;
         let mut selections = vec![];
-        if let None = populate_selections_with_general_options(game_decisions, &mut selections, different_found, any_not_installed_mods_with_both_ver_supporting) {
+        if populate_selections_with_general_options(game_decisions, &mut selections, different_found, any_not_installed_mods_with_both_ver_supporting).is_none() {
             info!("Not found any games to update");
             return Ok(());
         }
@@ -119,21 +115,18 @@ impl Ask for Dialogs {
         // important do not change order of below if call as later in iteration may provide out of index error
         let selected_text = &selections[selection];
         let sel = LabelOptions::from(&selected_text[..]);
-        match sel {
-            Skip => {
-                info!("Chosen skip option.");
-                return Ok(());
-            }
-            _ => (),
+        if sel == Skip {
+            info!("Chosen skip option.");
+            return Ok(());
         };
 
-        if let Some(_) = populate_selected_assets_base_on_general_option(sel, game_decisions, state, different_found, any_not_installed_mods_with_both_ver_supporting) {
+        if populate_selected_assets_base_on_general_option(sel, game_decisions, state, different_found, any_not_installed_mods_with_both_ver_supporting).is_some() {
             return Ok(());
         }
 
         if let Some((asset, _, game_id)) = game_decisions.get(&selections[selection]) {
             debug!("Adding single asset {}", asset.name);
-            state.selected_assets.push(asset.clone().clone());
+            state.selected_assets.push(asset.clone());
             state.selected_game_to_launch = game_id.clone();
         };
         Ok(())
@@ -165,7 +158,7 @@ impl Ask for Dialogs {
                             ),
                             game.steamId.as_ref().unwrap(),
                         );
-                        ()
+                        
                     })
                 })
                 .unwrap_or_default();
@@ -184,7 +177,7 @@ impl Ask for Dialogs {
         selections.push(SwitchType.to_label());
         selections.push(Exit.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!("Select game to run"))
+            .with_prompt("Select game to run".to_string())
             .default(0)
             .items(&selections[..])
             .interact()
@@ -232,7 +225,7 @@ impl Ask for Dialogs {
             );
             conf.runtime = Some(runtime.as_opposite());
         }
-        state.selected_game_to_launch = Some(selected_steam_id.clone().to_string());
+        state.selected_game_to_launch = Some(selected_steam_id);
         Ok(())
     }
 
@@ -286,11 +279,9 @@ impl Ask for Dialogs {
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(Exit.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(
-                r"Select game and its mod version to switch. 
+            .with_prompt(r"Select game and its mod version to switch. 
                 Note TDB = standard version if game supports standard/nextgen 
-                where non TDB = Nextgen version "
-            ))
+                where non TDB = Nextgen version ".to_string())
             .default(0)
             .items(&selections[..])
             .interact()
@@ -337,16 +328,13 @@ impl Ask for Dialogs {
                         SwitchToNextgen(short_name.to_string()).to_label()
                     }
                 });
-                if label.is_some() {
-                    return Some(label.unwrap());
-                };
-                None
+                label
             })
             .collect();
 
         selections.push(Exit.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!("Select game to switch"))
+            .with_prompt("Select game to switch".to_string())
             .default(0)
             .items(&selections[..])
             .interact()
@@ -380,12 +368,11 @@ impl Ask for Dialogs {
                         .unwrap_or_default()
                     });
 
-                    if second_asset_name.is_some() {
-                        let second_asset_name = second_asset_name.unwrap();
+                    if let Some(second_asset_name) = second_asset_name {
                         debug!("preparing unzip for {}", second_asset_name);
                         let path_to_zip = get_local_path_to_cache_folder(None, Some(&first_set[0]))
                             .map(|path| path.join(second_asset_name))
-                            .or(Err(Report::new(DialogsErrors::Other)))?;
+                            .map_err(|_| Report::new(DialogsErrors::Other))?;
                         if !path_to_zip.exists() {
                             return Ok(RemoveNonexistentToggleNRunThenExit(short_name, second_asset_name.to_string()));
                         }
@@ -406,7 +393,7 @@ impl Ask for Dialogs {
 }
 
 pub fn populate_selections_with_general_options(game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>, selections: &mut Vec<String>, different_found: &bool, any_not_installed_mods_with_both_ver_supporting: &bool) -> Option<()> {
-    if game_decisions.len() > 0 {
+    if !game_decisions.is_empty() {
         selections.push(UpdateAllGames.to_label());
         if *different_found && !*any_not_installed_mods_with_both_ver_supporting {
             // will choose base of your current local mod settings per game
@@ -500,9 +487,9 @@ impl Dialogs {
                             None => {
                                 debug!("Nextgen field is missing for {} - game supporting both version. Probably mod is not installed", game_short_name);
                                 if is_tdb {
-                                    return (format!("{} Standard version", game_short_name.to_string()), None, true, TWO_VERSION_SUPPORTED)
+                                    return (format!("{} Standard version", game_short_name), None, true, TWO_VERSION_SUPPORTED)
                                 } else {
-                                    return (format!("{} Nextgen version", game_short_name.to_string()), None, true, TWO_VERSION_SUPPORTED)
+                                    return (format!("{} Nextgen version", game_short_name), None, true, TWO_VERSION_SUPPORTED)
                                 }
                             }
                         };
@@ -525,7 +512,7 @@ impl Dialogs {
                         };
                         debug!("Asset is Nextgen but installed mod is TDB");
                         set_label_for_download_switch(&mut text, "nextgen", "standard");
-                        return (text, Some(false), false, TWO_VERSION_SUPPORTED);
+                        (text, Some(false), false, TWO_VERSION_SUPPORTED)
                     })
                     .unwrap_or_else(|| {
                         debug!("asset is not TDB nor Nextgen");
@@ -563,8 +550,8 @@ fn set_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_s
         "{}      {}(your current version of mod is {} -> it will switch to {})",
         text,
         SORT_DETERMINER,
-        next_or_std.to_string(),
-        next_or_std_sec.to_string()
+        next_or_std,
+        next_or_std_sec
     );
 }
 

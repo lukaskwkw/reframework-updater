@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use self_update::update::ReleaseAsset;
 
-
 use crate::dialogs::dialogs::ResultDialogsErr;
 use crate::dialogs::dialogs::SwitchActionReport;
 
@@ -28,7 +27,7 @@ pub fn ask_for_game_decision_if_needed_return_mock(
         state.selected_game_to_launch = Some(steam_id.clone());
         Ok(())
     };
-    return Box::new(default);
+    Box::new(default)
 }
 
 pub fn ask_for_decision_and_populate_selected_assets_return_mock() -> Box<
@@ -56,5 +55,5 @@ pub fn ask_for_decision_and_populate_selected_assets_return_mock() -> Box<
         });
         Ok(())
     };
-    return Box::new(default);
+    Box::new(default)
 }

@@ -57,8 +57,6 @@ impl Display for LocalError {
 
 impl Error for LocalError {}
 
-type LocalResult<T> = Result<T, LocalError>;
-
 impl LocalFiles for LocalProvider {
     fn get_local_report_for_game(&self, game_path: &str, game_short_name: &str) -> LocalGameConfig {
         LocalGameConfig {

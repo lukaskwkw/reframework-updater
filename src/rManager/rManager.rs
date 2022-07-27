@@ -1,10 +1,4 @@
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    env,
-    ffi::OsStr,
-    fs,
-};
+use std::{cmp::Ordering, collections::HashMap, env, ffi::OsStr, fs};
 
 use crate::{
     args::RunAfter,
@@ -30,8 +24,8 @@ use crate::{
         is_asset_tdb::is_asset_tdb, local_version::LocalFiles, progress_style,
         restart_program::restart_program, version_parser::isRepoVersionNewer,
     },
-    DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE,
-    REPO_OWNER, STANDARD_TYPE_QUALIFIER,
+    DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
+    STANDARD_TYPE_QUALIFIER,
 };
 use std::path::Path;
 
@@ -139,12 +133,12 @@ impl REvilThings for REvilManager {
                     let runtime = game
                         .runtime
                         .clone()
-                        .or(game_config.runtime.clone())
+                        .or_else(|| game_config.runtime.clone())
                         .unwrap();
                     debug!("runtime {:?} game {}", runtime, game_short_name);
                     *game = GameConfig {
                         runtime: Some(runtime),
-                        nextgen: game.nextgen.clone(),
+                        nextgen: game.nextgen,
                         runArgs: game.runArgs.clone(),
                         versions: game.versions.clone(),
                         version_in_use: game.version_in_use.clone(),
@@ -181,7 +175,7 @@ impl REvilThings for REvilManager {
             let local_config = self
                 .local_provider
                 .get_local_report_for_game(game_location, short_name);
-            if !local_config.runtime.is_none() {
+            if local_config.runtime.is_some() {
                 config.runtime = local_config.runtime;
             }
             // we want check config.versions because maybe found new steam game and we don't want to
@@ -244,10 +238,10 @@ impl REvilThings for REvilManager {
                         warn!("{}", err);
                         debug!("{:?}", err);
                     });
-                return Ok(());
+                Ok(())
             })?;
 
-        return Ok(self);
+        Ok(self)
     }
 
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self> {
@@ -264,9 +258,10 @@ impl REvilThings for REvilManager {
         self.github_release_manager = Some((self.refr_ctor)(&repo_owner, &source));
 
         info!("Checking if new release exists");
-        let manager = self.github_release_manager.as_mut().ok_or(Report::new(
-            REvilManagerError::ReleaseManagerIsNotInitialized,
-        ))?;
+        let manager = self
+            .github_release_manager
+            .as_mut()
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         manager.get_reframework_latest_release().or_else(|err| {
             Err(Report::new(REvilManagerError::CheckingNewReleaseErr))
                 .attach_printable(format!("{:?}", err))
@@ -299,7 +294,7 @@ impl REvilThings for REvilManager {
         if !self
             .state
             .games_that_require_update
-            .contains(&game_short_name.to_string())
+            .contains(game_short_name)
         {
             info!("Update not required for {}", game_short_name);
             return Ok(self);
@@ -319,9 +314,7 @@ impl REvilThings for REvilManager {
             .github_release_manager
             .as_ref()
             .map(|men| men.getAssetsReport())
-            .ok_or(Report::new(
-                REvilManagerError::ReleaseManagerIsNotInitialized,
-            ))?;
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         self.dialogs
             .ask_for_decision_and_populate_selected_assets(
                 &mut self.config,
@@ -387,20 +380,23 @@ impl REvilThings for REvilManager {
     where
         F: Fn(&OsStr) -> bool,
     {
-        let game_config = self.config.games.get(game_short_name).ok_or(Report::new(
-            REvilManagerError::GameNotFoundForGivenShortName(game_short_name.to_string()),
-        ))?;
-        let manager = self.github_release_manager.as_ref().ok_or(Report::new(
-            REvilManagerError::ReleaseManagerIsNotInitialized,
-        ))?;
+        let game_config = self.config.games.get(game_short_name).ok_or_else(|| {
+            Report::new(REvilManagerError::GameNotFoundForGivenShortName(
+                game_short_name.to_string(),
+            ))
+        })?;
+        let manager = self
+            .github_release_manager
+            .as_ref()
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         let release = manager.getRelease();
         let path_to_zip = get_local_path_to_cache_folder(release, version)
             .map(|path| path.join(file_name))
-            .or(Err(Report::new(REvilManagerError::GetLocalPathToCacheErr)))?;
+            .map_err(|_| Report::new(REvilManagerError::GetLocalPathToCacheErr))?;
         let location = game_config
             .location
             .as_ref()
-            .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
+            .ok_or_else(|| Report::new(REvilManagerError::GameLocationMissing))?;
 
         if unzip_skip_fun.is_some() {
             unzip(&path_to_zip, &location, unzip_skip_fun).change_context(
@@ -417,12 +413,12 @@ impl REvilThings for REvilManager {
             .as_ref()
             .map(|runtime| -> Box<dyn Fn(&OsStr) -> bool> {
                 let should_skip = |f: &OsStr| f == OsStr::new(&runtime.as_opposite_local_dll());
-                return Box::new(should_skip);
+                Box::new(should_skip)
             })
             .unwrap_or_else(|| {
                 let should_skip =
                     |f: &OsStr| f == OsStr::new(&Runtime::OpenVR.as_opposite_local_dll());
-                return Box::new(should_skip);
+                Box::new(should_skip)
             });
 
         unzip(&path_to_zip, location, Some(closure)).change_context(
@@ -451,7 +447,6 @@ impl REvilThings for REvilManager {
                 let game_short_name = game_short_name;
                 let asset_name_result = self
                     .unzip_update::<fn(&OsStr) -> bool>(game_short_name, &asset.name, None, None)
-                    .map_err(|err| err)
                     .map(|_| (asset.name.to_string(), Ok(())))
                     .unwrap_or_else(|err| (asset.name.to_string(), Err(err)));
 
@@ -478,7 +473,7 @@ impl REvilThings for REvilManager {
                 &()
             });
         });
-        return self;
+        self
     }
 
     fn after_unzip_work(
@@ -486,31 +481,27 @@ impl REvilThings for REvilManager {
         options: Option<Vec<AfterUnzipOption>>,
     ) -> Result<&mut Self, REvilManagerError> {
         let selected_assets = &self.state.selected_assets;
-        let manager = self.github_release_manager.as_ref().ok_or(Report::new(
-            REvilManagerError::ReleaseManagerIsNotInitialized,
-        ))?;
+        let manager = self
+            .github_release_manager
+            .as_ref()
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         let release = manager.getRelease();
         let version: &str = release
             .as_ref()
-            .ok_or(Report::new(REvilManagerError::ReleaseIsEmpty))?
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseIsEmpty))?
             .name
             .as_ref();
         let results: Vec<ResultManagerErr<()>> = selected_assets
             .iter()
             .map(|asset| -> ResultManagerErr<()> {
-                let game_short_name = get_game_short_name_from_asset(&asset)?;
+                let game_short_name = get_game_short_name_from_asset(asset)?;
                 info!("After unzip work for {} - start", game_short_name);
 
                 if options.is_none()
                     || options.is_some()
-                        && options
-                            .as_ref()
-                            .unwrap()
-                            .iter()
-                            .find(|option| {
-                                **option == AfterUnzipOption::SkipRemovingFromRequiredUpdates
-                            })
-                            .is_none()
+                        && !options.as_ref().unwrap().iter().any(|option| {
+                            *option == AfterUnzipOption::SkipRemovingFromRequiredUpdates
+                        })
                 {
                     // remove game from req_update_games vec as it is already updated!
                     remove_game_from_update_needed_ones(
@@ -519,25 +510,20 @@ impl REvilThings for REvilManager {
                     );
                 }
 
-                let game_config = self
-                    .config
-                    .games
-                    .get_mut(game_short_name)
-                    .ok_or(Report::new(
-                        REvilManagerError::GameNotFoundForGivenShortName(
-                            game_short_name.to_string(),
-                        ),
-                    ))?;
+                let game_config = self.config.games.get_mut(game_short_name).ok_or_else(|| {
+                    Report::new(REvilManagerError::GameNotFoundForGivenShortName(
+                        game_short_name.to_string(),
+                    ))
+                })?;
 
                 // add version from asset to array or create new array with the asset version
                 if options.is_none()
                     || options.is_some()
-                        && options
+                        && !options
                             .as_ref()
                             .unwrap()
                             .iter()
-                            .find(|option| **option == AfterUnzipOption::SkipSettingVersion)
-                            .is_none()
+                            .any(|option| *option == AfterUnzipOption::SkipSettingVersion)
                 {
                     add_asset_ver_to_game_conf_ver(game_config, version, asset);
                 }
@@ -578,7 +564,7 @@ impl REvilThings for REvilManager {
         });
         self.state.selected_assets.drain(..);
 
-        return Ok(self);
+        Ok(self)
     }
 
     fn save_config(&mut self) -> ResultManagerErr<&mut Self> {
@@ -707,7 +693,7 @@ impl REvilThings for REvilManager {
                     .to_vec(),
                 ))?;
                 match self.config.games.get_mut(&short_name) {
-                    Some(game_config) => game_config.version_in_use = Some(version.to_string()),
+                    Some(game_config) => game_config.version_in_use = Some(version),
                     None => (),
                 };
                 self.state.selected_game_to_launch =
@@ -771,7 +757,7 @@ impl REvilThings for REvilManager {
         let game_dir = game_config
             .location
             .as_ref()
-            .ok_or(Report::new(REvilManagerError::GameLocationMissing))?;
+            .ok_or_else(|| Report::new(REvilManagerError::GameLocationMissing))?;
         let game_dir = Path::new(&game_dir);
 
         let runtime = game_config.runtime.as_ref().unwrap();
@@ -781,18 +767,14 @@ impl REvilThings for REvilManager {
 
             let file_name = version_vec.iter().skip(1).find(|name| {
                 is_asset_tdb(
-                    &game_short_name,
+                    game_short_name,
                     &ReleaseAsset {
                         name: name.to_string(),
                         ..Default::default()
                     },
                 )
-                .and_then(|is_tdb| match game_config.nextgen {
-                    Some(nextgen) => Some((is_tdb, nextgen)),
-                    None => return None,
-                })
-                .and_then(|(is_tdb, nextgen)| Some((is_tdb && !nextgen) || (!is_tdb && nextgen)))
-                // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
+                .and_then(|is_tdb| game_config.nextgen.map(|nextgen| (is_tdb, nextgen)))
+                .map(|(is_tdb, nextgen)| (is_tdb && !nextgen) || (!is_tdb && nextgen)) // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
                 .unwrap_or(true)
             });
 
@@ -801,8 +783,8 @@ impl REvilThings for REvilManager {
 
             self.unzip_update(
                 game_short_name,
-                &file_name,
-                Some(&ver),
+                file_name,
+                Some(ver),
                 Some(should_skip_all_except),
             )?;
             info!("Unzipped only {} file", runtime.as_local_dll());
@@ -820,7 +802,7 @@ impl REvilThings for REvilManager {
 
             info!("Launching the game {}", game_short_name);
             self.steam_menago
-                .run_game_via_steam_manager(&steam_id)
+                .run_game_via_steam_manager(steam_id)
                 .change_context(REvilManagerError::default())?
         } else {
             info!("Game to launch is none")
@@ -885,9 +867,10 @@ impl REvilManager {
     }
 
     fn set_games_that_require_update(&mut self) -> ResultManagerErr<()> {
-        let manager = self.github_release_manager.as_mut().ok_or(Report::new(
-            REvilManagerError::ReleaseManagerIsNotInitialized,
-        ))?;
+        let manager = self
+            .github_release_manager
+            .as_mut()
+            .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         let release = manager.getRelease();
         self.config
             .games
@@ -897,7 +880,7 @@ impl REvilManager {
                     let latest_local_version = game.versions.as_ref().unwrap().first().unwrap();
                     let latest_github_version = release
                         .as_ref()
-                        .ok_or(Report::new(REvilManagerError::ReleaseIsEmpty))?
+                        .ok_or_else(|| Report::new(REvilManagerError::ReleaseIsEmpty))?
                         .name
                         .as_ref();
                     debug!(
@@ -909,14 +892,14 @@ impl REvilManager {
                         latest_local_version.first().unwrap(),
                         latest_github_version,
                     );
-                    is_rnewer.map(|is| {
+                    if let Some(is) = is_rnewer {
                         is.then(|| {
                             self.state
                                 .games_that_require_update
                                 .push(short_name.to_string())
                         })
                         .unwrap_or(());
-                    });
+                    }
                 } else {
                     debug!(
                         "Version is None treating like needs to be added for update. For {}.",
@@ -949,9 +932,8 @@ fn set_game_from_report_as_selected_to_download(
     game_short_name: &String,
 ) -> ResultManagerErr<()> {
     let rel_manager = github_release_manager.as_ref();
-    let rel_manager = rel_manager.ok_or(Report::new(
-        REvilManagerError::ReleaseManagerIsNotInitialized,
-    ))?;
+    let rel_manager = rel_manager
+        .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
     let assets_report = rel_manager.getAssetsReport();
 
     assets_report
@@ -1001,16 +983,18 @@ fn get_game_short_name_from_asset(asset: &ReleaseAsset) -> ResultManagerErr<&str
     let game_short_name = asset
         .name
         .split_once(STANDARD_TYPE_QUALIFIER)
-        .and_then(|(short_name, _)| Some(short_name))
+        .map(|(short_name, _)| short_name)
         .or_else(|| {
             asset
                 .name
                 .split_once(".zip")
-                .and_then(|(short_name, _)| Some(short_name))
+                .map(|(short_name, _)| short_name)
         })
-        .ok_or(Report::new(
-            REvilManagerError::CannotDeductShortNameFromAssetName(asset.name.clone()),
-        ))?;
+        .ok_or_else(|| {
+            Report::new(REvilManagerError::CannotDeductShortNameFromAssetName(
+                asset.name.clone(),
+            ))
+        })?;
     Ok(game_short_name)
 }
 
@@ -1034,10 +1018,10 @@ fn add_asset_ver_to_game_conf_ver(
                     "switch has one or more assets. Assets len {}",
                     first_set.len() - 1
                 );
-                return (vecc, true);
+                (vecc, true)
             } else {
                 debug!("switch has no assets");
-                return ([version.to_string(), asset.name.to_string()].to_vec(), true);
+                ([version.to_string(), asset.name.to_string()].to_vec(), true)
             }
         } else {
             debug!("no switch asset {}", asset.name);
@@ -1047,11 +1031,8 @@ fn add_asset_ver_to_game_conf_ver(
             )
         }
     });
-    if version_and_switch.is_none() {
-        game_config.versions =
-            Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec());
-    } else {
-        let (version, switch) = version_and_switch.unwrap();
+    if let Some(version_and_switch) = version_and_switch {
+        let (version, switch) = version_and_switch;
         let versions = game_config.versions.as_mut().unwrap();
 
         if switch {
@@ -1060,6 +1041,9 @@ fn add_asset_ver_to_game_conf_ver(
         } else {
             versions.insert(0, version);
         }
+    } else {
+        game_config.versions =
+            Some([[version.to_string(), asset.name.to_string()].to_vec()].to_vec());
     }
     game_config.version_in_use = Some(version.to_string());
 }
@@ -1069,16 +1053,16 @@ fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> 
         game_config
             .location
             .as_ref()
-            .ok_or(Report::new(REvilManagerError::GameLocationMissing))?,
+            .ok_or_else(|| Report::new(REvilManagerError::GameLocationMissing))?,
     );
     let open_runtime_path = game_folder.join(
         game_config
             .runtime
             .as_ref()
-            .ok_or(REvilManagerError::ModRuntimeIsNone("".to_string()))?
+            .ok_or_else(|| REvilManagerError::ModRuntimeIsNone("".to_string()))?
             .as_opposite_local_dll(),
     );
-    Ok(if Path::new(&open_runtime_path).exists() {
+    if Path::new(&open_runtime_path).exists() {
         fs::remove_file(&open_runtime_path)
             .report()
             .change_context(REvilManagerError::RemoveFileFailed(
@@ -1093,7 +1077,8 @@ fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> 
             "Second runtime file doesn't exist {}",
             open_runtime_path.display()
         );
-    })
+    };
+    Ok(())
 }
 
 fn get_steam_id_by_short_name<'a>(
@@ -1136,8 +1121,7 @@ pub mod tests {
             dialogs,
             mock_reft_constr,
         );
-        evil_manager.github_release_manager =
-            Some((evil_manager.refr_ctor)(&"praydog", &"nightly"));
+        evil_manager.github_release_manager = Some((evil_manager.refr_ctor)("praydog", "nightly"));
         evil_manager.load_config().unwrap();
         evil_manager
     }

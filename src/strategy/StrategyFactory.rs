@@ -1,11 +1,9 @@
 use crate::{
-    args::{RunAfter},
-    rManager::rManager_header::REvilThings,
-    rManager::rManager_header::{REvilManager},
-    ARGS,
+    args::RunAfter, rManager::rManager_header::REvilManager,
+    rManager::rManager_header::REvilThings, ARGS,
 };
 use error_stack::ResultExt;
-use log::{info, error, warn, Level};
+use log::{error, info, warn, Level};
 
 pub struct StrategyFactory;
 
@@ -14,15 +12,12 @@ trait Strategy {
 }
 
 impl StrategyFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
     pub fn get_strategy(_manager: &mut REvilManager) -> Box<fn(&mut REvilManager)> {
         let run = get_args();
         if run != "none" {
-            return Box::new(CheckUpdateAndRunTheGame::run);
+            Box::new(CheckUpdateAndRunTheGame::run)
         } else {
-            return Box::new(DefaultRoute::run);
+            Box::new(DefaultRoute::run)
         }
     }
 }

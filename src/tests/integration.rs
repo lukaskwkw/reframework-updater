@@ -142,7 +142,7 @@ pub mod tests {
 
             config_provider_mock
                 .expect_load_from_file()
-                .returning(|| Err(Report::new(ConfigError::ConfigFileError)));
+                .returning(|| Err(Report::new(ConfigError::ConfigFile)));
 
             local_provider_mock
                 .expect_get_local_report_for_game()
@@ -263,7 +263,7 @@ pub mod tests {
 
             config_provider_mock
                 .expect_load_from_file()
-                .returning(|| Err(Report::new(ConfigError::ConfigFileError)));
+                .returning(|| Err(Report::new(ConfigError::ConfigFile)));
 
             steam_menago
                 .expect_run_game_via_steam_manager()

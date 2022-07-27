@@ -29,11 +29,11 @@ pub fn cleanup_cache(
         return Ok(());
     }
     let last_ver_nb = &last_ver[0];
-    let cache_dir = get_local_path_to_cache_folder(None, Some(&last_ver_nb)).or(Err(Report::new(
-        REvilManagerError::ReleaseManagerIsNotInitialized,
-    )))?;
-    Ok(if cache_dir.exists() {
-        let file_to_remove = cache_dir.join(last_ver[1].to_string());
+    let cache_dir = get_local_path_to_cache_folder(None, Some(last_ver_nb)).map_err(|_| 
+        Report::new(REvilManagerError::ReleaseManagerIsNotInitialized,
+    ))?;
+    if cache_dir.exists() {
+        let file_to_remove = cache_dir.join(&last_ver[1]);
         if Path::new(&file_to_remove).exists() {
             fs::remove_file(&file_to_remove).report().change_context(
                 REvilManagerError::RemoveZipAssetFromCacheErr(file_to_remove.display().to_string()),
@@ -47,5 +47,6 @@ pub fn cleanup_cache(
                 err
             ),
         };
-    })
+    };
+    Ok(())
 }

@@ -13,7 +13,7 @@ type ConfigResult<T> = Result<T, ConfigError>;
 pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
     let main_table = toml::to_string_pretty(&config.main)
         .report()
-        .change_context(ConfigError::SerializerError)
+        .change_context(ConfigError::Serializer)
         .attach_printable_lazy(|| {
             format!("Error during serialization of main {:?}", &config.main)
         })?;
@@ -24,7 +24,7 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
         .map(|(key, value)| {
             let config_str = toml::to_string_pretty(&value)
                 .report()
-                .change_context(ConfigError::SerializerError)
+                .change_context(ConfigError::Serializer)
                 .attach_printable(format!(
                     "err during serialization of key {} value {:?}",
                     key, value
@@ -46,23 +46,23 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
     let value = content
         .parse::<Value>()
         .report()
-        .change_context(ConfigError::DeserializerError)?;
+        .change_context(ConfigError::Deserializer)?;
 
-    let table =match value.as_table() {
+    let table = match value.as_table() {
         Some(table) => table,
-        None => return Err(ConfigError::DeserializerError)?,
+        None => return Err(ConfigError::Deserializer)?,
     };
 
-    let (_key, main_value) = match table
-            .iter()
-            .find(|(s, _v)| s == &"main") {
+    let (_key, main_value) = match table.iter().find(|(s, _v)| s == &"main") {
         Some((key, main_value)) => (key, main_value),
-        None => Err(ConfigError::DeserializerError).report().attach_printable("Main not found!")?,
+        None => Err(ConfigError::Deserializer)
+            .report()
+            .attach_printable("Main not found!")?,
     };
 
     let main: Main = Value::from_value(main_value.to_owned())
         .report()
-        .change_context(ConfigError::DeserializerError)?;
+        .change_context(ConfigError::Deserializer)?;
 
     let games = table
         .iter()
@@ -73,7 +73,7 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
             let config = match Value::from_value(v.to_owned()) {
                 Ok(it) => it,
                 Err(err) => {
-                    eprintln!("Deserializer error - Reading {} game config {:#?} from toml \n toml::from_value error: {}", s, v.to_string(), err);
+                    eprintln!("Deserializer error - Reading {} game config {:#?} from toml \n toml::from_value error: {}", s, v, err);
                     return None;
                 }
             };

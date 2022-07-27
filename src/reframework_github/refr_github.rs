@@ -75,7 +75,7 @@ impl ManageGithub for REFRGithub {
                 self.report
                     .entry(it.to_string())
                     .and_modify(|assets| assets.push(asset.clone()))
-                    .or_insert([asset.clone()].to_vec());
+                    .or_insert_with(|| [asset.clone()].to_vec());
             } else {
                 let short_name = asset.name.split('.').collect::<Vec<&str>>();
                 let short_name = short_name.first().ok_or(format!(

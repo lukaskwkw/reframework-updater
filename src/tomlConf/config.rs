@@ -31,10 +31,10 @@ impl ConfigProvider for REvilConfigProvider {
     fn load_from_file(&self) -> ConfigResult<REvilConfig> {
         let content = fs::read_to_string(&self.filename)
             .report()
-            .change_context(ConfigFileError)
+            .change_context(ConfigFile)
             .attach_printable_lazy(|| format!("Error reading {}", &self.filename))?;
 
-        let (main, games) = deserialize(&content).change_context(DeserializerError)?;
+        let (main, games) = deserialize(&content).change_context(Deserializer)?;
         Ok(REvilConfig { main, games })
     }
 
@@ -42,10 +42,10 @@ impl ConfigProvider for REvilConfigProvider {
         let content = serialize(config)?;
         let mut file = File::create(&self.filename)
             .report()
-            .change_context(ConfigFileError)?;
+            .change_context(ConfigFile)?;
         file.write(content.as_bytes())
             .report()
-            .change_context(ConfigFileError)?;
+            .change_context(ConfigFile)?;
         Ok(())
     }
 }

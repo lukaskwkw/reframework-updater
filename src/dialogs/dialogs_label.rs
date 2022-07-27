@@ -34,13 +34,10 @@ impl From<&str> for LabelOptions {
             "Update all games - prefer standard" => UpdateAllGamesPreferStandard,
             "Update all games - prefer nextgen" => UpdateAllGamesPreferNextgen,
             "Update all games - autodetect" => UpdateAllGamesAutoDetect,
-            label => {
-                let option = deduct_switch_to(label)
-                    .or(deduct_load_from_cache(label))
-                    .or(label.contains(SWITCH_RUNTIME_PART).then_some(SwitchRuntime))
-                    .unwrap_or(Other);
-                option
-            }
+            label => deduct_switch_to(label)
+                .or_else(|| deduct_load_from_cache(label))
+                .or_else(|| label.contains(SWITCH_RUNTIME_PART).then_some(SwitchRuntime))
+                .unwrap_or(Other),
         }
     }
 }
@@ -48,7 +45,7 @@ impl From<&str> for LabelOptions {
 fn deduct_load_from_cache(label: &str) -> Option<LabelOptions> {
     label
         .contains("from cache")
-        .then(|| match label.splitn(4,'|').collect::<Vec<&str>>()[..] {
+        .then(|| match label.splitn(4, '|').collect::<Vec<&str>>()[..] {
             [_, short_name, asset_name, version] => LoadFromCache(
                 short_name.to_string(),
                 asset_name.to_string(),

@@ -1,11 +1,10 @@
 #[cfg(test)]
 pub mod mock_conf_provider {
     use crate::tomlConf::{
-        config::{MockConfigProvider, ConfigResult},
-        configStruct::{REvilConfig},
+        config::{ConfigResult, MockConfigProvider},
+        configStruct::REvilConfig,
         utils::deserialize,
     };
-
 
     pub fn get_config_provider_mock() -> Box<MockConfigProvider> {
         let mock_config_provider = MockConfigProvider::new();
@@ -18,7 +17,8 @@ pub mod mock_conf_provider {
         config_provider
     }
 
-    pub fn load_from_file_default_return_mock() -> Box<dyn Fn() -> ConfigResult<REvilConfig> + Send> {
+    pub fn load_from_file_default_return_mock() -> Box<dyn Fn() -> ConfigResult<REvilConfig> + Send>
+    {
         let default = || -> ConfigResult<REvilConfig> {
             let content = r#"
         [main]
@@ -52,8 +52,7 @@ pub mod mock_conf_provider {
         runtime = "OpenVR"
         latawiec = true
     "#;
-            let (main, games) =
-                deserialize(&content).unwrap();
+            let (main, games) = deserialize(content).unwrap();
             Ok(REvilConfig { main, games })
         };
         Box::new(default)

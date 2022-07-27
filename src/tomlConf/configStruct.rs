@@ -3,9 +3,9 @@ use std::{collections::HashMap, error::Error, fmt::Debug};
 
 #[derive(Debug)]
 pub enum ConfigError {
-    ConfigFileError,
-    DeserializerError,
-    SerializerError,
+    ConfigFile,
+    Deserializer,
+    Serializer,
 }
 
 impl std::fmt::Display for ConfigError {
