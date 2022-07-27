@@ -28,7 +28,7 @@ pub(crate) fn init_dialogs_mocks() -> (
         // init_logger("debug"); // uncomment if need more data for debugging
     });
 
-    let (ctx, refr_constr) = prepare_refr_github_mock_and_get_constr();
+    let (_ctx, refr_constr) = prepare_refr_github_mock_and_get_constr();
     let refr_github = refr_constr("something", "anything");
     let assets_report = refr_github.getAssetsReport().clone();
     let mut config_provider_mock = get_config_provider_mock();

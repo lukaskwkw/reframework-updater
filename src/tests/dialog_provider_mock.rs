@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use self_update::update::ReleaseAsset;
 
-use crate::dialogs::dialogs::DialogsErrors;
+
 use crate::dialogs::dialogs::ResultDialogsErr;
 use crate::dialogs::dialogs::SwitchActionReport;
 

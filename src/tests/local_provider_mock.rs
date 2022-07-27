@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::utils::local_version::{MockLocalFiles, LocalGameConfig};
+use crate::utils::local_version::{MockLocalFiles};
 
 pub(crate) fn mock_local_provider_w_defaults(local_provider_mock: &mut Box<MockLocalFiles>) {
     local_provider_mock

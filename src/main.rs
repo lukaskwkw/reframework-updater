@@ -117,3 +117,4 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
 // TODO add saving logs by using simple-log
 // TODO maybe instead terminating catchable on error show that error and then ask for press key to exit?
+// TODO maybe add information about local version and repo version

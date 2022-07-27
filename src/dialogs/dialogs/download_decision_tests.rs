@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 
-use log::debug;
-use self_update::update::ReleaseAsset;
 
-use super::Dialogs;
+
+
+
+
 use crate::{
     dialogs::{
         dialogs::{
@@ -12,15 +12,8 @@ use crate::{
         },
         dialogs_label::LabelOptions,
     },
-    rManager::rManager_header::REvilManagerState,
-    tests::{
-        config_provider_mock::mock_conf_provider::get_config_provider_mock,
-        refr_github_mock::MockManageGithubM,
-    },
-    tomlConf::{config::ConfigProvider, configStruct::REvilConfig},
-    utils::init_logger::init_logger,
 };
-use std::sync::Once;
+
 
 mod init_dialogs_mock;
 

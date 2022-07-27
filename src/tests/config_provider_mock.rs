@@ -2,10 +2,10 @@
 pub mod mock_conf_provider {
     use crate::tomlConf::{
         config::{MockConfigProvider, ConfigResult},
-        configStruct::{ConfigError, REvilConfig},
+        configStruct::{REvilConfig},
         utils::deserialize,
     };
-use error_stack::{IntoReport, Result, ResultExt};
+
 
     pub fn get_config_provider_mock() -> Box<MockConfigProvider> {
         let mock_config_provider = MockConfigProvider::new();

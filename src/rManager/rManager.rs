@@ -4,7 +4,6 @@ use std::{
     env,
     ffi::OsStr,
     fs,
-    process::{self},
 };
 
 use crate::{
@@ -31,7 +30,7 @@ use crate::{
         is_asset_tdb::is_asset_tdb, local_version::LocalFiles, progress_style,
         restart_program::restart_program, version_parser::isRepoVersionNewer,
     },
-    DynResult, ARGS, GAMES, GAMES_NEXTGEN_SUPPORT, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE,
+    DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE,
     REPO_OWNER, STANDARD_TYPE_QUALIFIER,
 };
 use std::path::Path;
@@ -792,7 +791,7 @@ impl REvilThings for REvilManager {
                     Some(nextgen) => Some((is_tdb, nextgen)),
                     None => return None,
                 })
-                .and_then(|(is_tdb, nextgen)| Some(((is_tdb && !nextgen) || (!is_tdb && nextgen))))
+                .and_then(|(is_tdb, nextgen)| Some((is_tdb && !nextgen) || (!is_tdb && nextgen)))
                 // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
                 .unwrap_or(true)
             });
@@ -1120,11 +1119,11 @@ pub mod tests {
 
     fn init() -> REvilManager {
         let (
-            mut steam_menago,
-            mut local_provider_mock,
+            steam_menago,
+            local_provider_mock,
             dialogs,
             mut config_provider_mock,
-            ctx,
+            _ctx,
             mock_reft_constr,
         ) = init_manager_mocks();
         config_provider_mock

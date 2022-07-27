@@ -173,9 +173,6 @@ impl Ask for Dialogs {
                 format!(
                     "Run {} - Runtime <{:?}>",
                     short_name,
-                    // TODO for games that don't have mod unpacked this panic! Fix it as well one above
-                    // but this should be fixed only if supporting when steam is broken 
-                    // as runtime should be populated after steam detection
                     game.runtime.as_ref().unwrap()
                 ),
                 game.steamId.as_ref().unwrap(),

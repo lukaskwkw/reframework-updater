@@ -3,7 +3,7 @@ pub mod tests {
     use error_stack::Report;
 
     use crate::args::{ArgsClap, RunAfter};
-    use crate::dialogs::dialogs::{Ask, MockAsk};
+    use crate::dialogs::dialogs::{MockAsk};
     use crate::strategy::StrategyFactory::StrategyFactory;
     use crate::tests::config_provider_mock::mock_conf_provider::load_from_file_default_return_mock;
 
@@ -33,7 +33,7 @@ pub mod tests {
                 local_provider_mock,
                 mut dialogs,
                 mut config_provider_mock,
-                ctx,
+                _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
             let id = steam_id.clone();
@@ -119,7 +119,7 @@ pub mod tests {
                 mut local_provider_mock,
                 mut dialogs,
                 mut config_provider_mock,
-                ctx,
+                _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
             let id = steam_id.clone();
@@ -203,7 +203,7 @@ pub mod tests {
                 local_provider_mock,
                 _,
                 mut config_provider_mock,
-                ctx,
+                _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
 
@@ -220,7 +220,7 @@ pub mod tests {
 
             dialogs
                 .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
-                .returning(|_, state| Ok(()));
+                .returning(|_, _state| Ok(()));
 
             steam_menago
                 .expect_run_game_via_steam_manager()
@@ -254,10 +254,10 @@ pub mod tests {
         games.iter().for_each(|short_name| {
             let (
                 mut steam_menago,
-                mut local_provider_mock,
+                local_provider_mock,
                 _,
                 mut config_provider_mock,
-                ctx,
+                _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
 
@@ -278,7 +278,7 @@ pub mod tests {
 
             dialogs
                 .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
-                .returning(|_, state| Ok(()));
+                .returning(|_, _state| Ok(()));
 
             let mut evil_manager = REvilManager::new(
                 config_provider_mock,

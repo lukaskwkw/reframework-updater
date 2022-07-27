@@ -1,6 +1,6 @@
 use std::num::ParseIntError;
 
-use log::{debug, error, warn};
+use log::{debug, warn};
 
 const VERSION_DELIMITER: char = '.';
 const HASH_DELIMITER: char = '-';

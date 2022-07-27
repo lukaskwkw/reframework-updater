@@ -118,9 +118,9 @@ pub mod unzip {
 
     #[cfg(test)]
     pub fn mock_unzip<F>(
-        file_to_unzip: impl AsRef<Path>,
-        destination: impl AsRef<Path>,
-        should_skip_this_file: Option<F>,
+        _file_to_unzip: impl AsRef<Path>,
+        _destination: impl AsRef<Path>,
+        _should_skip_this_file: Option<F>,
     ) -> Result<bool, UnzipError>
     where
         F: Fn(&OsStr) -> bool,
