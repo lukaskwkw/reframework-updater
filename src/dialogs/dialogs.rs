@@ -64,10 +64,10 @@ pub struct Dialogs;
 
 type SecondAssetName = String;
 pub enum SwitchActionReport {
-    ToggleNSaveRunExit(ShortGameName),
-    ToggleNUnzipSaveRunThenExit(ShortGameName, SecondAssetName),
-    RemoveNonexistentToggleNRunThenExit(ShortGameName, SecondAssetName),
-    ToggleNSetSwitchSaveRunThenExit(ShortGameName),
+    ToggleNSaveRestart(ShortGameName),
+    ToggleNUnzipSave(ShortGameName, SecondAssetName),
+    UnsetNonExistentToggleNRestart(ShortGameName, SecondAssetName),
+    ToggleNSetSwitchSaveRestart(ShortGameName),
     Early,
 }
 use LabelOptions::*;
@@ -118,7 +118,7 @@ impl Ask for Dialogs {
         if sel == Skip {
             info!("Chosen skip option.");
             return Ok(());
-        };
+        }
 
         if populate_selected_assets_base_on_general_option(sel, game_decisions, state, different_found, any_not_installed_mods_with_both_ver_supporting).is_some() {
             return Ok(());
@@ -127,7 +127,6 @@ impl Ask for Dialogs {
         if let Some((asset, _, game_id)) = game_decisions.get(&selections[selection]) {
             debug!("Adding single asset {}", asset.name);
             state.selected_assets.push(asset.clone());
-            state.selected_game_to_launch = game_id.clone();
         };
         Ok(())
     }
@@ -162,7 +161,7 @@ impl Ask for Dialogs {
                     })
                 })
                 .unwrap_or_default();
-            selections_h_map.insert(
+           selections_h_map.insert(
                 format!(
                     "Run {} - Runtime <{:?}>",
                     short_name,
@@ -175,7 +174,9 @@ impl Ask for Dialogs {
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(LoadDifferentVersionFromCache.to_label());
         selections.push(SwitchType.to_label());
+        selections.push(GoTop.to_label());
         selections.push(Exit.to_label());
+
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select game to run".to_string())
             .default(0)
@@ -197,6 +198,10 @@ impl Ask for Dialogs {
             }
             LoadDifferentVersionFromCache => {
                 state.selected_option = Some(LoadDifferentVersionFromCache);
+                return Ok(());
+            },
+            GoTop => {
+                state.selected_option = Some(GoTop);
                 return Ok(());
             }
             _ => (),
@@ -277,7 +282,7 @@ impl Ask for Dialogs {
             }
         });
         selections.sort_by(|a, b| REvilManager::sort(a, b));
-        selections.push(Exit.to_label());
+        selections.push(Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(r"Select game and its mod version to switch. 
                 Note TDB = standard version if game supports standard/nextgen 
@@ -332,7 +337,7 @@ impl Ask for Dialogs {
             })
             .collect();
 
-        selections.push(Exit.to_label());
+        selections.push(Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select game to switch".to_string())
             .default(0)
@@ -342,8 +347,8 @@ impl Ask for Dialogs {
         let selected_text = &selections[selection];
 
         match LabelOptions::from(&selected_text[..]) {
-            Exit => {
-                info!("Chosen exit option. Bye bye..");
+            Back => {
+                state.selected_option = Some(Back);
                 return Ok(Early);
             }
             SwitchToStandard(short_name) | SwitchToNextgen(short_name) => {
@@ -374,17 +379,17 @@ impl Ask for Dialogs {
                             .map(|path| path.join(second_asset_name))
                             .map_err(|_| Report::new(DialogsErrors::Other))?;
                         if !path_to_zip.exists() {
-                            return Ok(RemoveNonexistentToggleNRunThenExit(short_name, second_asset_name.to_string()));
+                            return Ok(UnsetNonExistentToggleNRestart(short_name, second_asset_name.to_string()));
                         }
-                        return Ok(ToggleNUnzipSaveRunThenExit(short_name, second_asset_name.clone()));
+                        return Ok(ToggleNUnzipSave(short_name, second_asset_name.clone()));
                     }
 
                 } else {
                     debug!("Game {} requires update anyway", short_name);
-                    return Ok(ToggleNSaveRunExit(short_name));
+                    return Ok(ToggleNSaveRestart(short_name));
                 }
                 
-                return Ok(ToggleNSetSwitchSaveRunThenExit(short_name));
+                return Ok(ToggleNSetSwitchSaveRestart(short_name));
             }
             _ => (),
         };

@@ -1,5 +1,5 @@
 use crate::{
-    args::RunAfter, rManager::rManager_header::REvilManager,
+    args::RunAfter, dialogs::dialogs_label::LabelOptions, rManager::rManager_header::REvilManager,
     rManager::rManager_header::REvilThings, ARGS,
 };
 use error_stack::ResultExt;
@@ -12,8 +12,10 @@ trait Strategy {
 }
 
 impl StrategyFactory {
-    pub fn get_strategy(_manager: &mut REvilManager) -> Box<fn(&mut REvilManager)> {
+    pub fn get_strategy(manager: &mut REvilManager) -> Box<fn(&mut REvilManager)> {
         let run = get_args();
+
+        manager.state.selected_option = Some(LabelOptions::GoTop);
         if run != "none" {
             Box::new(CheckUpdateAndRunTheGame::run)
         } else {
@@ -30,11 +32,10 @@ impl Strategy for CheckUpdateAndRunTheGame {
             .check_for_REFramework_update()
             .and_then(|this| this.pick_one_game_from_report_and_set_as_selected())
             .and_then(|this| this.download_REFramework_update())
-            .unwrap()
-            .unzip_updates()
-            .after_unzip_work(None)
+            .and_then(|this| this.unzip_updates().after_unzip_work(None))
             .and_then(|this| this.save_config())
-            .and_then(|this| this.ask_for_game_decision_if_needed())
+            // below is only necessary when restarting program with switch option
+            .and_then(|this| this.decision_loop())
             .unwrap();
         LaunchAndSave::run(manager);
     }
@@ -51,30 +52,13 @@ impl Strategy for LaunchAndSave {
     }
 }
 
-struct AskLastOptions;
-impl Strategy for AskLastOptions {
-    fn run(manager: &mut REvilManager) {
-        manager
-            .ask_for_game_decision_if_needed()
-            .and_then(|this| this.ask_for_switch_type_decision(RunAfter::yes))
-            .and_then(|this| this.load_from_cache_if_chosen())
-            .unwrap();
-    }
-}
-
-struct CheckAndRest;
-impl Strategy for CheckAndRest {
+struct CheckThenLoop;
+impl Strategy for CheckThenLoop {
     fn run(manager: &mut REvilManager) {
         manager
             .check_for_REFramework_update()
-            .and_then(|this| this.ask_for_decision())
-            .and_then(|this| this.download_REFramework_update())
-            .unwrap()
-            .unzip_updates()
-            .after_unzip_work(None)
-            .and_then(|this| this.save_config())
+            .and_then(|this| this.decision_loop())
             .unwrap();
-        AskLastOptions::run(manager);
         LaunchAndSave::run(manager);
     }
 }
@@ -110,7 +94,7 @@ impl Strategy for DefaultRoute {
             manager.get_local_settings_per_game_and_amend_current_ones();
         };
 
-        CheckAndRest::run(manager);
+        CheckThenLoop::run(manager);
     }
 }
 

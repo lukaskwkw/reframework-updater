@@ -10,6 +10,8 @@ pub enum LabelOptions {
     LoadDifferentVersionFromCache,
     LoadFromCache(ShortGameName, AssetName, Version),
     Skip,
+    Back,
+    GoTop,
     Exit,
     UpdateAllGames,
     UpdateAllGamesAutoDetect,
@@ -34,6 +36,9 @@ impl From<&str> for LabelOptions {
             "Update all games - prefer standard" => UpdateAllGamesPreferStandard,
             "Update all games - prefer nextgen" => UpdateAllGamesPreferNextgen,
             "Update all games - autodetect" => UpdateAllGamesAutoDetect,
+            "Back" => Back,
+            "Back to download section" => GoTop,
+ 
             label => deduct_switch_to(label)
                 .or_else(|| deduct_load_from_cache(label))
                 .or_else(|| label.contains(SWITCH_RUNTIME_PART).then_some(SwitchRuntime))
@@ -94,6 +99,8 @@ impl LabelOptions {
                 short_name, asset_name, version
             ),
             Other => "Other".to_string(),
+            Back => "Back".to_string(),
+            GoTop => "Back to download section".to_string(),
         }
     }
 }

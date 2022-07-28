@@ -19,7 +19,6 @@
           "kind": "bin"
         }
       },
-      "args": ["./src/tests/RE.zip"],
       "cwd": "${workspaceFolder}"
     },
     {

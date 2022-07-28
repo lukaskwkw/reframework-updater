@@ -48,6 +48,7 @@ pub trait REvilThings {
     fn generate_main_defaults(&mut self) -> Result<&mut Self, REvilManagerError>;
     fn get_local_settings_per_game_and_amend_current_ones(&mut self) -> &mut Self;
     fn generate_ms_links(&mut self) -> Result<&mut Self, REvilManagerError>;
+    fn decision_loop(&mut self) -> ResultManagerErr<&mut Self>;
     fn check_for_REFramework_update(&mut self) -> ResultManagerErr<&mut Self>;
     fn pick_one_game_from_report_and_set_as_selected(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_decision(&mut self) -> ResultManagerErr<&mut Self>;

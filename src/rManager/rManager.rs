@@ -593,7 +593,7 @@ impl REvilThings for REvilManager {
 
         use SwitchActionReport::*;
         match what_next {
-            ToggleNUnzipSaveRunThenExit(short_name, second_asset_name) => {
+            ToggleNUnzipSave(short_name, second_asset_name) => {
                 self.toggle_nextgen(&short_name);
                 self.unzip_update::<fn(&OsStr) -> bool>(
                     &short_name,
@@ -614,11 +614,10 @@ impl REvilThings for REvilManager {
                     .to_vec(),
                 ))?;
                 self.save_config()?;
-                self.state.selected_game_to_launch =
-                    Some(get_steam_id_by_short_name(&self.config.games, &short_name).to_string());
+                self.state.selected_option = Some(LabelOptions::Back);
                 return Ok(self);
             }
-            ToggleNSetSwitchSaveRunThenExit(short_name) => {
+            ToggleNSetSwitchSaveRestart(short_name) => {
                 self.toggle_nextgen(&short_name);
                 self.set_switch_as_version(&short_name);
                 self.save_config()?;
@@ -626,7 +625,7 @@ impl REvilThings for REvilManager {
                     .report()
                     .change_context(REvilManagerError::ErrorRestartingProgram)?;
             }
-            RemoveNonexistentToggleNRunThenExit(game_short_name, second_asset_name) => {
+            UnsetNonExistentToggleNRestart(game_short_name, second_asset_name) => {
                 self.toggle_nextgen(&game_short_name);
                 let game_conf = self.config.games.get_mut(&game_short_name).unwrap();
                 let first_set = game_conf.versions.as_mut().unwrap().first_mut().unwrap();
@@ -646,7 +645,7 @@ impl REvilThings for REvilManager {
             Early => {
                 return Ok(self);
             }
-            ToggleNSaveRunExit(game_short_name) => {
+            ToggleNSaveRestart(game_short_name) => {
                 self.toggle_nextgen(&game_short_name);
                 self.save_config()?;
                 restart_program(run_after, game_short_name)
@@ -696,11 +695,12 @@ impl REvilThings for REvilManager {
                     Some(game_config) => game_config.version_in_use = Some(version),
                     None => (),
                 };
-                self.state.selected_game_to_launch =
-                    Some(get_steam_id_by_short_name(&self.config.games, &short_name).to_string());
+                self.state.selected_option = Some(LabelOptions::Back);
+            }
+            Back => {
+                self.state.selected_option = Some(Back);
             }
             _ => {
-                return Ok(self);
             }
         }
         Ok(self)
@@ -842,6 +842,29 @@ impl REvilThings for REvilManager {
                 self
             }
         }
+    }
+
+    fn decision_loop(&mut self) -> ResultManagerErr<&mut Self> {
+        while self.state.selected_option == Some(LabelOptions::GoTop)
+                && self.state.selected_game_to_launch.is_none() {
+            debug!("Select download option");
+            self.ask_for_decision()
+                .and_then(|this| this.download_REFramework_update())
+                .and_then(|this| this.unzip_updates().after_unzip_work(None))
+                .and_then(|this| this.save_config())?;
+
+            self.state.selected_option = Some(LabelOptions::Back);
+
+            while self.state.selected_option == Some(LabelOptions::Back)
+                && self.state.selected_game_to_launch.is_none()
+            {
+                debug!("Select decision");
+                self.ask_for_game_decision_if_needed()
+                    .and_then(|this| this.ask_for_switch_type_decision(RunAfter::no))
+                    .and_then(|this| this.load_from_cache_if_chosen())?;
+            }
+        }
+        Ok(self)
     }
 }
 
