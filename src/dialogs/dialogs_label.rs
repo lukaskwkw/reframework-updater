@@ -6,6 +6,7 @@ pub enum LabelOptions {
     SwitchType,
     SwitchToStandard(String),
     SwitchToNextgen(String),
+    SwitchRuntimeSection,
     SwitchRuntime,
     LoadDifferentVersionFromCache,
     LoadFromCache(ShortGameName, AssetName, Version),
@@ -29,6 +30,7 @@ impl From<&str> for LabelOptions {
     fn from(text: &str) -> Self {
         match text {
             "Switch type..." => SwitchType,
+            "Switch runtime..." => SwitchRuntimeSection,
             "Load from cache..." => LoadDifferentVersionFromCache,
             "Skip" => Skip,
             "Exit" => Exit,
@@ -101,6 +103,7 @@ impl LabelOptions {
             Other => "Other".to_string(),
             Back => "Back".to_string(),
             GoTop => "Back to download section".to_string(),
+            SwitchRuntimeSection => "Switch runtime...".to_string(),
         }
     }
 }

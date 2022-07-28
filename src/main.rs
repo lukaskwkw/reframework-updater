@@ -107,9 +107,6 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     thread::sleep(secs);
     Ok(())
 }
-// TODO maybe implement back functionality
-// TODO maybe implement not run game after any switching option
-
 // TODO Broken download/unzip doesn't no longer alter the game mod config. But maybe we can 
 //      also add option to not launch not updated/unzipped correctly mod. I.e. can be implemented as follow 
 //      when selected_game_to_launch is same as for broken download/unzip then terminate process after prompt inside

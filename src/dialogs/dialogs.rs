@@ -26,6 +26,7 @@ pub enum DialogsErrors {
     #[default]
     Other,
     GameNotFoundForGivenSteamId(String),
+    NoGamesToUpdate,
 }
 // TODO Fill above structs with more errors rather than just using Other everywhere.
 
@@ -41,6 +42,10 @@ pub type ResultDialogsErr<T> = Result<T, DialogsErrors>;
 
 #[cfg_attr(test, automock)]
 pub trait Ask {
+    fn ask_for_runtime_decision_and_change_it(&mut self,
+        config: &mut REvilConfig,
+        state: &mut REvilManagerState
+    ) -> ResultDialogsErr<()>;
     fn ask_for_decision_and_populate_selected_assets(
         &mut self,
         config: &mut REvilConfig,
@@ -52,11 +57,11 @@ pub trait Ask {
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
     ) -> ResultDialogsErr<()>;
-    fn get_selected_cache_option(&mut self, config: &mut REvilConfig) -> LabelOptions;
+    fn get_selected_cache_option(&mut self, config: &REvilConfig) -> LabelOptions;
     fn get_switch_type_decision(
         &mut self,
-        config: &mut REvilConfig,
-        state: &mut REvilManagerState,
+        config: &REvilConfig,
+        state: &REvilManagerState,
     ) -> ResultDialogsErr<SwitchActionReport>;
 }
 
@@ -84,7 +89,7 @@ impl Ask for Dialogs {
         let mut selections = vec![];
         if populate_selections_with_general_options(game_decisions, &mut selections, different_found, any_not_installed_mods_with_both_ver_supporting).is_none() {
             info!("Not found any games to update");
-            return Ok(());
+            return Err(Report::new(DialogsErrors::NoGamesToUpdate));
         }
 
         let mut texts: Vec<String> = game_decisions.keys().cloned().collect();
@@ -141,26 +146,11 @@ impl Ask for Dialogs {
         }
 
         let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
-        
+        let mut any_game_that_support_2_versions = false;
         config.games.iter().for_each(|(short_name, game)| {
-            game.versions
-                .as_ref()
-                .and_then(|versions| {
-                    (versions.first().unwrap().len() > 1 && game.runtime.is_some()).then(|| {
-                        selections_h_map.insert(
-                            format!(
-                                "{}: {} <{:?}> for {} and run game",
-                                SORT_DETERMINER,
-                                SWITCH_RUNTIME_PART,
-                                game.runtime.as_ref().unwrap().as_opposite(),
-                                short_name
-                            ),
-                            game.steamId.as_ref().unwrap(),
-                        );
-                        
-                    })
-                })
-                .unwrap_or_default();
+            if !any_game_that_support_2_versions && GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
+                any_game_that_support_2_versions = true;
+            }
            selections_h_map.insert(
                 format!(
                     "Run {} - Runtime <{:?}>",
@@ -171,9 +161,11 @@ impl Ask for Dialogs {
             );
         });
         let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
-        selections.sort_by(|a, b| REvilManager::sort(a, b));
+        selections.push(SwitchRuntimeSection.to_label());
         selections.push(LoadDifferentVersionFromCache.to_label());
-        selections.push(SwitchType.to_label());
+        if any_game_that_support_2_versions {
+            selections.push(SwitchType.to_label());
+        }
         selections.push(GoTop.to_label());
         selections.push(Exit.to_label());
 
@@ -187,6 +179,10 @@ impl Ask for Dialogs {
         let selected_text = &selections[selection];
 
         match LabelOptions::from(&selected_text[..]) {
+            SwitchRuntimeSection => {
+                state.selected_option = Some(SwitchRuntimeSection);
+                return Ok(());
+            }
             Exit => {
                 info!("Chosen exit option. Bye bye..");
                 state.selected_option = Some(Exit);
@@ -213,28 +209,11 @@ impl Ask for Dialogs {
             .clone()
             .to_string();
 
-        if selected_text.contains(SORT_DETERMINER) {
-            let (game_short_name, _) = find_game_conf_by_steam_id(config, &selected_steam_id)
-                .change_context(DialogsErrors::GameNotFoundForGivenSteamId(
-                    selected_steam_id.clone(),
-                ))?;
-            let game_short_name = game_short_name.clone();
-            let game_config = config.games.get_mut(&game_short_name);
-            let conf = game_config.unwrap();
-            let runtime = conf.runtime.as_ref().unwrap();
-            info!(
-                "Switching runtime {:?} to {:?} for {}",
-                runtime,
-                runtime.as_opposite(),
-                game_short_name
-            );
-            conf.runtime = Some(runtime.as_opposite());
-        }
         state.selected_game_to_launch = Some(selected_steam_id);
         Ok(())
     }
 
-    fn get_selected_cache_option(&mut self, config: &mut REvilConfig) -> LabelOptions {
+    fn get_selected_cache_option(&mut self, config: &REvilConfig) -> LabelOptions {
         let mut selections: Vec<String> = Vec::new();
         config.games.iter().for_each(|(short_name, game_config)| {
             let versions = game_config.versions.as_ref();
@@ -298,16 +277,10 @@ impl Ask for Dialogs {
 
     fn get_switch_type_decision(
         &mut self,
-        config: &mut REvilConfig,
-        state: &mut REvilManagerState,
+        config: &REvilConfig,
+        state: &REvilManagerState,
     ) -> ResultDialogsErr<SwitchActionReport> {
-        let selected_option = state.selected_option.as_ref();
         use SwitchActionReport::*;
-        if selected_option.is_none()
-            || selected_option.is_some() && selected_option.unwrap() != &SwitchType
-        {
-            return Ok(Early);
-        }
         let mut selections: Vec<String> = config
             .games
             .iter()
@@ -348,7 +321,6 @@ impl Ask for Dialogs {
 
         match LabelOptions::from(&selected_text[..]) {
             Back => {
-                state.selected_option = Some(Back);
                 return Ok(Early);
             }
             SwitchToStandard(short_name) | SwitchToNextgen(short_name) => {
@@ -394,6 +366,74 @@ impl Ask for Dialogs {
             _ => (),
         };
         Ok(Early)
+    }
+
+    fn ask_for_runtime_decision_and_change_it(&mut self, config: &mut REvilConfig, state: &mut REvilManagerState) -> ResultDialogsErr<()> {
+        let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
+        config.games.iter().for_each(|(short_name, game)| {
+        game.versions
+                .as_ref()
+                .and_then(|versions| {
+                    (versions.first().unwrap().len() > 1 && game.runtime.is_some()).then(|| {
+                        selections_h_map.insert(
+                            format!(
+                                "{} <{:?}> for {}",
+                                SWITCH_RUNTIME_PART,
+                                game.runtime.as_ref().unwrap().as_opposite(),
+                                short_name
+                            ),
+                            game.steamId.as_ref().unwrap(),
+                        );
+                        
+                    })
+                })
+                .unwrap_or_default();
+            });
+        if selections_h_map.is_empty() {
+            info!("Please download mod for particular game to be able to switch between runtime");
+
+        }
+        let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
+        selections.push(Back.to_label());
+
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select game to run".to_string())
+            .default(0)
+            .items(&selections[..])
+            .interact()
+            .unwrap();
+
+        let selected_text = &selections[selection];
+
+        match LabelOptions::from(&selected_text[..]) {
+            Back => {
+                state.selected_option = Some(Back);
+                return Ok(());
+            },
+            _ => {}
+        }
+        let selected_steam_id = selections_h_map
+            .get(&selections[selection])
+            .unwrap()
+            .clone()
+            .to_string();
+        let (game_short_name, _) = find_game_conf_by_steam_id(config, &selected_steam_id)
+            .change_context(DialogsErrors::GameNotFoundForGivenSteamId(
+                selected_steam_id.clone(),
+            ))?;
+        let game_short_name = game_short_name.clone();
+        let game_config = config.games.get_mut(&game_short_name);
+        let conf = game_config.unwrap();
+        let runtime = conf.runtime.as_ref().unwrap();
+        info!(
+            "Switched runtime from {:?} to {:?} for {}",
+            runtime,
+            runtime.as_opposite(),
+            game_short_name
+        );
+        conf.runtime = Some(runtime.as_opposite());
+        state.selected_option = Some(Back);
+        Ok(())
     }
 }
 

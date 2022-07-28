@@ -69,6 +69,7 @@ pub trait REvilThings {
     ) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
+    fn ask_for_switch_runtime_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self>;
     fn load_from_cache_if_chosen(&mut self) -> ResultManagerErr<&mut Self>;
     fn check_for_self_update(&mut self) -> DynResult<&mut Self>;
@@ -87,7 +88,7 @@ pub trait REvilThings {
     ) -> &mut Self;
 }
 
-#[derive(Debug, Default)]
+#[derive(PartialEq, Debug, Default)]
 pub enum REvilManagerError {
     ReleaseIsEmpty,
     CheckingNewReleaseErr,
@@ -100,6 +101,7 @@ pub enum REvilManagerError {
     FailedToCreateMsLink(String),
     ReleaseManagerIsNotInitialized,
     GameLocationMissing,
+    NoGamesToUpdate,
     ModRuntimeIsNone(String),
     GetLocalPathToCacheErr,
     UnzipError(String),
@@ -151,6 +153,7 @@ impl fmt::Display for REvilManagerError {
                 write!(f, "During downloading {} asset there was an error", asset_name)
             }
             REvilManagerError::ModIsNotInstalled(short_name) => write!(f, "Mod is not installed for {}", short_name),
+            REvilManagerError::NoGamesToUpdate => write!(f, "No games to update"),
         }
     }
 }

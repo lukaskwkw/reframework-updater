@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::HashMap, env, ffi::OsStr, fs};
 use crate::{
     args::RunAfter,
     dialogs::{
-        dialogs::{Ask, SwitchActionReport},
+        dialogs::{Ask, DialogsErrors, SwitchActionReport},
         dialogs_label::LabelOptions,
     },
     rManager::cleanup_cache::cleanup_cache,
@@ -321,7 +321,10 @@ impl REvilThings for REvilManager {
                 &mut self.state,
                 report,
             )
-            .change_context(REvilManagerError::Other)?;
+            .map_err(|err| match err.current_context() {
+                DialogsErrors::NoGamesToUpdate => return REvilManagerError::NoGamesToUpdate,
+                _ => return REvilManagerError::Other,
+            })?;
         Ok(self)
     }
 
@@ -584,8 +587,28 @@ impl REvilThings for REvilManager {
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
+    fn ask_for_switch_runtime_if_needed(&mut self) -> ResultManagerErr<&mut Self> {
+        use LabelOptions::*;
+        let selected_option = self.state.selected_option.as_ref();
+        if selected_option.is_none()
+            || selected_option.is_some() && selected_option.unwrap() != &SwitchRuntimeSection
+        {
+            return Ok(self);
+        }
+        self.dialogs
+            .ask_for_runtime_decision_and_change_it(&mut self.config, &mut self.state)
+            .change_context(REvilManagerError::Other)?;
+        self.save_config()?;
+        Ok(self)
+    }
 
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self> {
+        let selected_option = self.state.selected_option.as_ref();
+        if selected_option.is_none()
+            || selected_option.is_some() && selected_option.unwrap() != &LabelOptions::SwitchType
+        {
+            return Ok(self);
+        }
         let what_next = self
             .dialogs
             .get_switch_type_decision(&mut self.config, &mut self.state)
@@ -643,6 +666,7 @@ impl REvilThings for REvilManager {
                     .change_context(REvilManagerError::ErrorRestartingProgram)?;
             }
             Early => {
+                self.state.selected_option = Some(LabelOptions::Back);
                 return Ok(self);
             }
             ToggleNSaveRestart(game_short_name) => {
@@ -665,7 +689,7 @@ impl REvilThings for REvilManager {
         {
             return Ok(self);
         }
-        let option = self.dialogs.get_selected_cache_option(&mut self.config);
+        let option = self.dialogs.get_selected_cache_option(&self.config);
         debug!("Ask for cache return option {:#?}", option);
         match option {
             LoadFromCache(short_name, asset_name, version) => {
@@ -700,8 +724,7 @@ impl REvilThings for REvilManager {
             Back => {
                 self.state.selected_option = Some(Back);
             }
-            _ => {
-            }
+            _ => {}
         }
         Ok(self)
     }
@@ -846,12 +869,20 @@ impl REvilThings for REvilManager {
 
     fn decision_loop(&mut self) -> ResultManagerErr<&mut Self> {
         while self.state.selected_option == Some(LabelOptions::GoTop)
-                && self.state.selected_game_to_launch.is_none() {
+            && self.state.selected_game_to_launch.is_none()
+        {
             debug!("Select download option");
             self.ask_for_decision()
                 .and_then(|this| this.download_REFramework_update())
                 .and_then(|this| this.unzip_updates().after_unzip_work(None))
-                .and_then(|this| this.save_config())?;
+                .and_then(|this| this.save_config())
+                .map(|_| Ok(()))
+                .unwrap_or_else(|err| {
+                    if err.current_context() == &REvilManagerError::NoGamesToUpdate {
+                        return Ok(());
+                    }
+                    Err(err)
+                })?;
 
             self.state.selected_option = Some(LabelOptions::Back);
 
@@ -861,7 +892,8 @@ impl REvilThings for REvilManager {
                 debug!("Select decision");
                 self.ask_for_game_decision_if_needed()
                     .and_then(|this| this.ask_for_switch_type_decision(RunAfter::no))
-                    .and_then(|this| this.load_from_cache_if_chosen())?;
+                    .and_then(|this| this.load_from_cache_if_chosen())
+                    .and_then(|this| this.ask_for_switch_runtime_if_needed())?;
             }
         }
         Ok(self)
