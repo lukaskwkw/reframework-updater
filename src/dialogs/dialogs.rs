@@ -153,9 +153,17 @@ impl Ask for Dialogs {
             }
            selections_h_map.insert(
                 format!(
-                    "Run {} - Runtime <{:?}>",
+                    "Run {}{} - <{:?}> {}",
                     short_name,
-                    game.runtime.as_ref().unwrap()
+                    game.nextgen.map(|nextgen| {
+                        if nextgen {
+                            " <Nextgen>"
+                        } else {
+                            " <Standard>"
+                        }
+                    }).unwrap_or_default(),
+                    game.runtime.as_ref().unwrap(),
+                    game.version_in_use.as_ref().unwrap_or(&"".to_string())
                 ),
                 game.steamId.as_ref().unwrap(),
             );

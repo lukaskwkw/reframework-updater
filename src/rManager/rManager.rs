@@ -890,6 +890,14 @@ impl REvilThings for REvilManager {
                 && self.state.selected_game_to_launch.is_none()
             {
                 debug!("Select decision");
+                info!(
+                    "Latest mod version: {}",
+                    self.github_release_manager
+                        .as_ref()
+                        .and_then(|man| man.getRelease())
+                        .map(|release| release.name.to_string())
+                        .unwrap_or_default()
+                );
                 self.ask_for_game_decision_if_needed()
                     .and_then(|this| this.ask_for_switch_type_decision(RunAfter::no))
                     .and_then(|this| this.load_from_cache_if_chosen())
