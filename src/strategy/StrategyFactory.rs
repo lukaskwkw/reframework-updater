@@ -81,6 +81,10 @@ impl Strategy for EarlyLoad {
                 .then(|| panic!("Error loading config file and error steam detection: {err}. Make sure steam is installed correctly"))
                 .unwrap_or(warn!("{err}")),
         };
+        // only check local files again when a config failed to be loaded or a steam found the new game
+        if manager.state.config_loading_error_ocurred || manager.state.new_steam_game_found {
+            manager.get_local_settings_per_game_and_amend_current_ones();
+        };
     }
 }
 
@@ -89,11 +93,6 @@ impl Strategy for DefaultRoute {
     fn run(manager: &mut REvilManager) {
         EarlyLoad::run(manager);
         manager.or_log_err(|this| this.generate_ms_links(), Level::Warn);
-        // only check local files again when a config failed to be loaded or a steam found the new game
-        if manager.state.config_loading_error_ocurred || manager.state.new_steam_game_found {
-            manager.get_local_settings_per_game_and_amend_current_ones();
-        };
-
         CheckThenLoop::run(manager);
     }
 }

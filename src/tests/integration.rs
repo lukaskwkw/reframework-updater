@@ -3,7 +3,7 @@ pub mod tests {
     use error_stack::Report;
 
     use crate::args::{ArgsClap, RunAfter};
-    use crate::dialogs::dialogs::{MockAsk};
+    use crate::dialogs::dialogs::MockAsk;
     use crate::strategy::StrategyFactory::StrategyFactory;
     use crate::tests::config_provider_mock::mock_conf_provider::load_from_file_default_return_mock;
 
@@ -13,7 +13,7 @@ pub mod tests {
         ask_for_game_decision_if_needed_return_mock,
     };
     use crate::tests::manager_mocks::init_manager_mocks;
-    use crate::tomlConf::configStruct::{ConfigError, ErrorLevel};
+    use crate::tomlConf::configStruct::{ConfigError, ErrorLevel, Runtime};
     use crate::utils::local_version::LocalGameConfig;
     use crate::ARGS;
 
@@ -99,7 +99,6 @@ pub mod tests {
 
             let game = evil_manager.config.games.get("RE7").unwrap();
             assert!(!game.nextgen.unwrap());
-
         });
     }
 
@@ -218,9 +217,7 @@ pub mod tests {
                 .expect_ask_for_decision_and_populate_selected_assets()
                 .never();
 
-            dialogs
-                .expect_main_section()
-                .returning(|_, _state| Ok(()));
+            dialogs.expect_main_section().returning(|_, _state| Ok(()));
 
             steam_menago
                 .expect_run_game_via_steam_manager()
@@ -245,7 +242,6 @@ pub mod tests {
             let strategy = StrategyFactory::get_strategy(&mut evil_manager);
             strategy(&mut evil_manager);
         })
-
     }
 
     #[test]
@@ -254,12 +250,32 @@ pub mod tests {
         games.iter().for_each(|short_name| {
             let (
                 mut steam_menago,
-                local_provider_mock,
+                mut local_provider_mock,
                 _,
                 mut config_provider_mock,
                 _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
+
+            local_provider_mock
+                .expect_get_local_report_for_game()
+                .returning(|_, short_name| {
+                    if short_name == "RE3" {
+                        LocalGameConfig {
+                            nextgen: Some(true),
+                            runtime: Some(Runtime::OpenXR),
+                            version: Some("abd3145".to_string()),
+                        }
+                    } else if short_name == "RE2" {
+                        LocalGameConfig {
+                            nextgen: Some(false),
+                            runtime: Some(Runtime::OpenVR),
+                            version: Some("07ab146".to_string()),
+                        }
+                    } else {
+                        LocalGameConfig::default()
+                    }
+                });
 
             config_provider_mock
                 .expect_load_from_file()
@@ -276,9 +292,7 @@ pub mod tests {
                 .expect_ask_for_decision_and_populate_selected_assets()
                 .never();
 
-            dialogs
-                .expect_main_section()
-                .returning(|_, _state| Ok(()));
+            dialogs.expect_main_section().returning(|_, _state| Ok(()));
 
             let mut evil_manager = REvilManager::new(
                 config_provider_mock,
@@ -297,7 +311,47 @@ pub mod tests {
             }
             let strategy = StrategyFactory::get_strategy(&mut evil_manager);
             strategy(&mut evil_manager);
-        })
 
+            if short_name == &"RE3" {
+                let re3_conf = evil_manager.config.games.get("RE3").unwrap();
+                assert!(re3_conf.nextgen.unwrap());
+                assert_eq!(re3_conf.runtime.as_ref().unwrap(), &Runtime::OpenXR);
+                assert_eq!(
+                    re3_conf.version_in_use.as_ref().unwrap(),
+                    &"v1.333-07ab146".to_string()
+                );
+                assert_eq!(
+                    re3_conf
+                        .versions
+                        .as_ref()
+                        .unwrap()
+                        .first()
+                        .unwrap()
+                        .first()
+                        .unwrap(),
+                    &"v1.333-07ab146".to_string()
+                );
+            }
+            if short_name == &"RE2" {
+                let re2_conf = evil_manager.config.games.get("RE2").unwrap();
+                assert!(!re2_conf.nextgen.unwrap());
+                assert_eq!(re2_conf.runtime.as_ref().unwrap(), &Runtime::OpenVR);
+                assert_eq!(
+                    re2_conf.version_in_use.as_ref().unwrap(),
+                    &"07ab146".to_string()
+                );
+                assert_eq!(
+                    re2_conf
+                        .versions
+                        .as_ref()
+                        .unwrap()
+                        .first()
+                        .unwrap()
+                        .first()
+                        .unwrap(),
+                    &"07ab146".to_string()
+                );
+            }
+        })
     }
 }
