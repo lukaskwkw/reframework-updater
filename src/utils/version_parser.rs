@@ -3,7 +3,7 @@ use std::num::ParseIntError;
 use log::{debug, warn};
 
 const VERSION_DELIMITER: char = '.';
-const HASH_DELIMITER: char = '-';
+pub const HASH_DELIMITER: char = '-';
 
 fn get_version_tuple(repo: &str) -> Option<(&str, &str, &str)> {
     let (major, minor_a_hash) = repo[1..].split_once(VERSION_DELIMITER)?;

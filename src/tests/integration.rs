@@ -43,7 +43,7 @@ pub mod tests {
                 .returning(ask_for_decision_and_populate_selected_assets_return_mock());
 
             dialogs
-                .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
+                .expect_main_section()
                 .returning(ask_for_game_decision_if_needed_return_mock(id.to_string()));
 
             steam_menago
@@ -152,7 +152,7 @@ pub mod tests {
                 .expect_ask_for_decision_and_populate_selected_assets()
                 .returning(ask_for_decision_and_populate_selected_assets_return_mock());
             dialogs
-                .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
+                .expect_main_section()
                 .returning(ask_for_game_decision_if_needed_return_mock(id.to_string()));
 
             let mut evil_manager = REvilManager::new(
@@ -219,7 +219,7 @@ pub mod tests {
                 .never();
 
             dialogs
-                .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
+                .expect_main_section()
                 .returning(|_, _state| Ok(()));
 
             steam_menago
@@ -277,7 +277,7 @@ pub mod tests {
                 .never();
 
             dialogs
-                .expect_ask_for_game_decision_if_needed_and_set_game_to_launch()
+                .expect_main_section()
                 .returning(|_, _state| Ok(()));
 
             let mut evil_manager = REvilManager::new(

@@ -13,6 +13,7 @@ pub enum LabelOptions {
     Skip,
     Back,
     GoTop,
+    RescanLocal,
     Exit,
     UpdateAllGames,
     UpdateAllGamesAutoDetect,
@@ -34,13 +35,14 @@ impl From<&str> for LabelOptions {
             "Load from cache..." => LoadDifferentVersionFromCache,
             "Skip" => Skip,
             "Exit" => Exit,
+            "Rescan local settings..." => RescanLocal,
             "Update all games" => UpdateAllGames,
             "Update all games - prefer standard" => UpdateAllGamesPreferStandard,
             "Update all games - prefer nextgen" => UpdateAllGamesPreferNextgen,
             "Update all games - autodetect" => UpdateAllGamesAutoDetect,
             "Back" => Back,
             "Back to download section" => GoTop,
- 
+
             label => deduct_switch_to(label)
                 .or_else(|| deduct_load_from_cache(label))
                 .or_else(|| label.contains(SWITCH_RUNTIME_PART).then_some(SwitchRuntime))
@@ -104,6 +106,7 @@ impl LabelOptions {
             Back => "Back".to_string(),
             GoTop => "Back to download section".to_string(),
             SwitchRuntimeSection => "Switch runtime...".to_string(),
+            RescanLocal => "Rescan local settings...".to_string(),
         }
     }
 }

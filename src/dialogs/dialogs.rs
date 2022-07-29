@@ -52,7 +52,7 @@ pub trait Ask {
         state: &mut REvilManagerState,
         report: &HashMap<String, Vec<ReleaseAsset>>,
     ) -> ResultDialogsErr<()>;
-    fn ask_for_game_decision_if_needed_and_set_game_to_launch(
+    fn main_section(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
@@ -136,7 +136,7 @@ impl Ask for Dialogs {
         Ok(())
     }
 
-    fn ask_for_game_decision_if_needed_and_set_game_to_launch(
+    fn main_section(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
@@ -151,6 +151,17 @@ impl Ask for Dialogs {
             if !any_game_that_support_2_versions && GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
                 any_game_that_support_2_versions = true;
             }
+            let ver_in_use = game.version_in_use.as_ref().map(|ver| ver.to_string()).unwrap_or_default();
+            // TODO below should add <cache> string to game if it is loaded from cache but should be fixed
+            //      as for now it will show <cache> for games that only has one version or version_in_use is not later in array
+            //      there should be first check versions.any() if version_in_use is later in array and then check for first
+            // let version_part = game.versions.as_ref()
+            //     .and_then(|versions| versions.first())
+            //     .and_then(|first_set| first_set.first())
+            //     .map(|ver| ver == &ver_in_use)
+            //     .and_then(|is_same_as_latest| is_same_as_latest.then(|| ver_in_use.clone()))
+            //     .unwrap_or_else(|| format!("{} <cache>", ver_in_use.clone()));
+
            selections_h_map.insert(
                 format!(
                     "Run {}{} - <{:?}> {}",
@@ -163,7 +174,7 @@ impl Ask for Dialogs {
                         }
                     }).unwrap_or_default(),
                     game.runtime.as_ref().unwrap(),
-                    game.version_in_use.as_ref().unwrap_or(&"".to_string())
+                    ver_in_use
                 ),
                 game.steamId.as_ref().unwrap(),
             );
@@ -174,6 +185,7 @@ impl Ask for Dialogs {
         if any_game_that_support_2_versions {
             selections.push(SwitchType.to_label());
         }
+        selections.push(RescanLocal.to_label());
         selections.push(GoTop.to_label());
         selections.push(Exit.to_label());
 
@@ -208,6 +220,10 @@ impl Ask for Dialogs {
                 state.selected_option = Some(GoTop);
                 return Ok(());
             }
+            RescanLocal => {
+                state.selected_option = Some(RescanLocal);
+                return Ok(());
+            }
             _ => (),
         };
 
@@ -232,7 +248,7 @@ impl Ask for Dialogs {
             let versions = versions.unwrap();
             for ver_set in versions.iter() {
                 if ver_set.len() < 2 {
-                    return;
+                    continue;
                 }
                 let ver = ver_set.first().unwrap();
                 let mut label_appendix: String = "".to_string();
@@ -382,6 +398,9 @@ impl Ask for Dialogs {
         game.versions
                 .as_ref()
                 .and_then(|versions| {
+                    // TODO now if loaded from cache and if latest version doesn't have zip assets in vector even when version_in_use is different and has, game won't show on list
+                    //      to fix this we need to replace this condition here with searching in array for cache
+                    //      tip: check rManager->rescan_option for find and use game.version_in_use to comparison
                     (versions.first().unwrap().len() > 1 && game.runtime.is_some()).then(|| {
                         selections_h_map.insert(
                             format!(

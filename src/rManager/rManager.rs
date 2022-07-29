@@ -20,9 +20,13 @@ use crate::{
     },
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
-        get_local_path_to_cache::get_local_path_to_cache_folder, init_logger::init_logger,
-        is_asset_tdb::is_asset_tdb, local_version::LocalFiles, progress_style,
-        restart_program::restart_program, version_parser::isRepoVersionNewer,
+        get_local_path_to_cache::get_local_path_to_cache_folder,
+        init_logger::init_logger,
+        is_asset_tdb::is_asset_tdb,
+        local_version::LocalFiles,
+        progress_style,
+        restart_program::restart_program,
+        version_parser::{isRepoVersionNewer, HASH_DELIMITER},
     },
     DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
     STANDARD_TYPE_QUALIFIER,
@@ -578,12 +582,9 @@ impl REvilThings for REvilManager {
         Ok(self)
     }
 
-    fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self> {
+    fn main_loop(&mut self) -> ResultManagerErr<&mut Self> {
         self.dialogs
-            .ask_for_game_decision_if_needed_and_set_game_to_launch(
-                &mut self.config,
-                &mut self.state,
-            )
+            .main_section(&mut self.config, &mut self.state)
             .change_context(REvilManagerError::Other)?;
         Ok(self)
     }
@@ -898,12 +899,73 @@ impl REvilThings for REvilManager {
                         .map(|release| release.name.to_string())
                         .unwrap_or_default()
                 );
-                self.ask_for_game_decision_if_needed()
+                self.main_loop()
                     .and_then(|this| this.ask_for_switch_type_decision(RunAfter::no))
                     .and_then(|this| this.load_from_cache_if_chosen())
-                    .and_then(|this| this.ask_for_switch_runtime_if_needed())?;
+                    .and_then(|this| this.rescan_option())
+                    .and_then(|this| this.ask_for_switch_runtime_if_needed())
+                    .and_then(|this| this.set_games_that_require_update())?;
             }
         }
+        Ok(self)
+    }
+
+    fn rescan_option(&mut self) -> ResultManagerErr<&mut Self> {
+        use LabelOptions::*;
+        let selected_option = self.state.selected_option.as_ref();
+        if selected_option.is_none()
+            || selected_option.is_some() && selected_option.unwrap() != &RescanLocal
+        {
+            return Ok(self);
+        }
+        info!("Rescaning local mod config per game");
+        let pb = ProgressBar::new_spinner();
+        pb.enable_steady_tick(Duration::from_millis(80).as_secs());
+        pb.set_style(progress_style::getProgressStyle());
+        for (short_name, config) in self.config.games.iter_mut() {
+            let game_location = config.location.as_ref().unwrap();
+            pb.set_message(format!("Loading config from {} ...", game_location));
+            pb.tick();
+            let local_config = self
+                .local_provider
+                .get_local_report_for_game(game_location, short_name);
+            if local_config.runtime.is_some() {
+                config.runtime = local_config.runtime;
+            }
+
+            if let Some(local_ver_hash) = local_config.version {
+                if let Some(versions) = config.versions.as_mut() {
+                    if let Some(first_set) = versions.iter().find(|ver_set| {
+                        ver_set
+                            .first()
+                            .map(|full_ver_or_hash| {
+                                full_ver_or_hash.split_once(HASH_DELIMITER)
+                                    .map(|(_, hash)| hash == local_ver_hash)
+                                    // below is check because there may be only hash
+                                    .unwrap_or_else(|| full_ver_or_hash == &local_ver_hash)
+                            })
+                            .unwrap_or_default()
+                    }) {
+                        // if local_ver is already in versions vector then we want full version info not only hash 
+                        config.version_in_use = Some(first_set.first().unwrap().to_string());
+                    } else {
+                        // if there is not in versions then push this hash as a version
+                        versions.insert(0, [local_ver_hash.to_string()].to_vec());
+                        config.version_in_use = Some(local_ver_hash);
+                    }
+                } else {
+                    // if no version array at all then create one
+                    config.versions = Some([[local_ver_hash.to_string()].to_vec()].to_vec());
+                    config.version_in_use = Some(local_ver_hash);
+                }
+            }
+            config.nextgen = local_config.nextgen;
+        }
+        pb.finish_with_message("Done");
+
+        self.state.selected_option = Some(LabelOptions::Back);
+        trace!("Full config: \n {:#?}", self.config);
+        self.save_config()?;
         Ok(self)
     }
 }
@@ -935,6 +997,7 @@ impl REvilManager {
             .as_mut()
             .ok_or_else(|| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
         let release = manager.getRelease();
+        self.state.games_that_require_update.drain(..);
         self.config
             .games
             .iter()
@@ -1161,6 +1224,7 @@ pub mod tests {
             config_provider_mock::mock_conf_provider::load_from_file_default_return_mock,
             manager_mocks::init_manager_mocks,
         },
+        utils::local_version::LocalGameConfig,
     };
 
     use super::*;
@@ -1237,5 +1301,100 @@ pub mod tests {
             .pick_one_game_from_report_and_set_as_selected()
             .unwrap();
         assert_eq!(evil_manager.state.selected_assets[0].name, "RE8.zip");
+    }
+    #[test]
+    fn reset_option_test() {
+        unsafe {
+            ARGS = Some(ArgsClap {
+                level: ErrorLevel::info,
+                one: "none".to_string(),
+                run: RunAfter::yes,
+            });
+        }
+        let (
+            steam_menago,
+            mut local_provider_mock,
+            dialogs,
+            mut config_provider_mock,
+            _ctx,
+            mock_reft_constr,
+        ) = init_manager_mocks();
+        config_provider_mock
+            .expect_load_from_file()
+            .returning(load_from_file_default_return_mock());
+        local_provider_mock
+            .expect_get_local_report_for_game()
+            .returning(|_, short_name| {
+                if short_name == "RE2" {
+                    LocalGameConfig {
+                        nextgen: Some(true),
+                        runtime: Some(Runtime::OpenVR),
+                        version: Some("1234567".to_string()),
+                    }
+                } else if short_name == "RE3" {
+                    LocalGameConfig {
+                        nextgen: Some(true),
+                        runtime: Some(Runtime::OpenXR),
+                        version: Some("abd3145".to_string()),
+                    }
+                } else {
+                    LocalGameConfig::default()
+                }
+            });
+        let mut evil_manager = REvilManager::new(
+            config_provider_mock,
+            local_provider_mock,
+            steam_menago,
+            dialogs,
+            mock_reft_constr,
+        );
+        evil_manager.load_config().unwrap();
+        evil_manager.state.selected_option = Some(LabelOptions::RescanLocal);
+        evil_manager.rescan_option().unwrap();
+        let re3_config = evil_manager.config.games.get("RE3").unwrap();
+        assert_eq!(re3_config.version_in_use, Some("v1.71-abd3145".to_string()));
+        assert_eq!(re3_config.nextgen, Some(true));
+        assert_eq!(re3_config.runtime, Some(Runtime::OpenXR));
+        assert_eq!(
+            re3_config
+                .versions
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .first()
+                .unwrap(),
+            &"v1.71-abd3145".to_string()
+        );
+        let re2_config = evil_manager.config.games.get("RE2").unwrap();
+        assert_eq!(re2_config.version_in_use, Some("1234567".to_string()));
+        assert_eq!(re2_config.nextgen, Some(true));
+        assert_eq!(re2_config.runtime, Some(Runtime::OpenVR));
+        assert_eq!(
+            re2_config
+                .versions
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .first()
+                .unwrap(),
+            &"1234567".to_string()
+        );
+        let re8_config = evil_manager.config.games.get("RE8").unwrap();
+        assert_eq!(re8_config.version_in_use, Some("v1.71-abd3145".to_string()));
+        assert_eq!(re8_config.nextgen, None);
+        assert_eq!(re8_config.runtime, Some(Runtime::OpenVR));
+        assert_eq!(
+            re8_config
+                .versions
+                .as_ref()
+                .unwrap()
+                .first()
+                .unwrap()
+                .first()
+                .unwrap(),
+            &"v1.71-abd3145".to_string()
+        )
     }
 }

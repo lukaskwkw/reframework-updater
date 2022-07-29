@@ -68,7 +68,8 @@ pub trait REvilThings {
         options: Option<Vec<AfterUnzipOption>>,
     ) -> Result<&mut Self, REvilManagerError>;
     fn save_config(&mut self) -> ResultManagerErr<&mut Self>;
-    fn ask_for_game_decision_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
+    fn rescan_option(&mut self) -> ResultManagerErr<&mut Self>;
+    fn main_loop(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_switch_runtime_if_needed(&mut self) -> ResultManagerErr<&mut Self>;
     fn ask_for_switch_type_decision(&mut self, run_after: RunAfter) -> ResultManagerErr<&mut Self>;
     fn load_from_cache_if_chosen(&mut self) -> ResultManagerErr<&mut Self>;

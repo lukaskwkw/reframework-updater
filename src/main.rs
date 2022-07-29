@@ -1,5 +1,6 @@
 use args::{ArgsClap, parse_args};
 use dialogs::dialogs::Dialogs;
+use log::info;
 #[cfg(target_os = "windows")]
 use rManager::rManager_header::REvilManager;
 use reframework_github::refr_github::{self, REFRGithub};
@@ -84,6 +85,7 @@ static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
 
 static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 3;
 
+static TIME_TO_CLOSE: u16 = 10;
 // #[tokio::main]
 fn main() -> Result<(), Box<dyn error::Error>> {
     unsafe {
@@ -103,7 +105,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     let strategy = StrategyFactory::get_strategy(&mut evil_manager);
     strategy(&mut evil_manager);
-    let secs = time::Duration::from_secs(7);
+    info!("This window will close after {} seconds", TIME_TO_CLOSE);
+    let secs = time::Duration::from_secs(TIME_TO_CLOSE as u64);
     thread::sleep(secs);
     Ok(())
 }
@@ -114,3 +117,6 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
 // TODO add saving logs by using simple-log
 // TODO maybe instead terminating catchable on error show that error and then ask for press key to exit?
+// TODO when first reloaded, local config can contain different version so it is added to beginning of array versions but then when switching different version from cache
+//      that particular mod from local config is gone now -> to fix that we should implement zipping local version after any detection or prevent to loading cache for that game (1st preferable) 
+//      this bug should not occurs often..
