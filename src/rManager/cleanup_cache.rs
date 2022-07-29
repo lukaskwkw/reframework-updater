@@ -16,7 +16,6 @@ use crate::refr_github::REFRGithub;
 use crate::refr_github::ManageGithub;
 
 pub fn cleanup_cache(
-    _manager: &Box<dyn ManageGithub<REFRGithub>>,
     last_ver: &Vec<String>,
     game_short_name: &str,
 ) -> ResultManagerErr<()> {

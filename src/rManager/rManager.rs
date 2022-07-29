@@ -549,7 +549,7 @@ impl REvilThings for REvilManager {
                 let versions = game_config.versions.as_ref().unwrap();
                 if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
                     let last_ver = versions.last().unwrap();
-                    cleanup_cache(manager, last_ver, game_short_name)?;
+                    cleanup_cache(last_ver, game_short_name)?;
 
                     // after cleaning up cache remove last item from versions vector
                     let mut versions = versions.clone();
@@ -939,19 +939,30 @@ impl REvilThings for REvilManager {
                         ver_set
                             .first()
                             .map(|full_ver_or_hash| {
-                                full_ver_or_hash.split_once(HASH_DELIMITER)
+                                full_ver_or_hash
+                                    .split_once(HASH_DELIMITER)
                                     .map(|(_, hash)| hash == local_ver_hash)
                                     // below is check because there may be only hash
                                     .unwrap_or_else(|| full_ver_or_hash == &local_ver_hash)
                             })
                             .unwrap_or_default()
                     }) {
-                        // if local_ver is already in versions vector then we want full version info not only hash 
+                        // if local_ver is already in versions vector then we want full version info not only hash
                         config.version_in_use = Some(first_set.first().unwrap().to_string());
                     } else {
                         // if there is not in versions then push this hash as a version
                         versions.insert(0, [local_ver_hash.to_string()].to_vec());
                         config.version_in_use = Some(local_ver_hash);
+                        // TODO check if below works
+                        if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
+                            let last_ver = versions.last().unwrap();
+                            cleanup_cache(last_ver, short_name)?;
+
+                            // after cleaning up cache remove last item from versions vector
+                            let mut versions = versions.clone();
+                            versions.pop();
+                            config.versions = Some(versions);
+                        }
                     }
                 } else {
                     // if no version array at all then create one
@@ -1369,6 +1380,7 @@ pub mod tests {
         let re2_config = evil_manager.config.games.get("RE2").unwrap();
         assert_eq!(re2_config.version_in_use, Some("1234567".to_string()));
         assert_eq!(re2_config.nextgen, Some(true));
+        assert_eq!(re2_config.versions.as_ref().unwrap().len(), 3);
         assert_eq!(re2_config.runtime, Some(Runtime::OpenVR));
         assert_eq!(
             re2_config

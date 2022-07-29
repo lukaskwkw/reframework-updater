@@ -29,7 +29,7 @@ pub mod mock_conf_provider {
         [RE2]
         location = "D:/steam/old_location_games/RE2"
         version_in_use = "v1.71-abd3145"
-        versions = [["v1.71-abd3145"]]
+        versions = [["v1.71-abd3145"],["v1.70-rbd3145"],["v1.61-zbd3145"]]
         nextgen = true
         steamId = "883710"
         runtime = "OpenXR"
