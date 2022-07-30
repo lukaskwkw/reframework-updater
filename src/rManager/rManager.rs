@@ -16,7 +16,7 @@ use crate::{
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
-        configStruct::{ErrorLevel, GameConfig, REvilConfig, Runtime, ShortGameName},
+        configStruct::{ErrorLevel, GameConfig, Main, REvilConfig, Runtime, ShortGameName},
     },
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
@@ -59,7 +59,13 @@ impl REvilManager {
         github_constr: fn(&str, &str) -> Box<dyn ManageGithub>,
     ) -> Self {
         Self {
-            config: REvilConfig::default(),
+            config: REvilConfig {
+                main: Main {
+                    max_cache_versions_per_game: Some(MAX_ZIP_FILES_PER_GAME_CACHE),
+                    ..Main::default()
+                },
+                ..REvilConfig::default()
+            },
             config_provider,
             steam_menago,
             local_provider,
@@ -548,7 +554,14 @@ impl REvilThings for REvilManager {
 
                 // it is ok to unwrap as in add_asset_ver_to_game_conf_ver step we added array to that game config
                 let versions = game_config.versions.as_ref().unwrap();
-                if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
+                let max_cache = self
+                    .config
+                    .main
+                    .max_cache_versions_per_game
+                    .unwrap_or(MAX_ZIP_FILES_PER_GAME_CACHE);
+                // TODO should iter here for surpassed vector and also should be changed in rescan_option as user dynamically can change max_cache in config file
+                //      p.s. now it slowly removes cache (after every download) maybe this is ok?
+                if versions.len() > max_cache.into() {
                     let last_ver = versions.last().unwrap();
                     cleanup_cache(last_ver, game_short_name)?;
 
@@ -966,7 +979,13 @@ impl REvilThings for REvilManager {
                         // if there is not in versions then push this hash as a version
                         versions.insert(0, [local_ver_hash.to_string()].to_vec());
                         config.version_in_use = Some(local_ver_hash);
-                        if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
+
+                        let max_cache = self
+                            .config
+                            .main
+                            .max_cache_versions_per_game
+                            .unwrap_or(MAX_ZIP_FILES_PER_GAME_CACHE);
+                        if versions.len() > max_cache.into() {
                             let last_ver = versions.last().unwrap();
                             cleanup_cache(last_ver, short_name)?;
 

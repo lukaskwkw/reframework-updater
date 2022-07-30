@@ -76,6 +76,7 @@ pub struct Main {
     pub sources: Option<Vec<String>>,
     pub repo_owner: Option<String>,
     pub chosen_source: Option<String>,
+    pub max_cache_versions_per_game: Option<u8>,
     pub autoupdate: Option<bool>,
     pub steamExePath: Option<String>,
     pub steamGamesIdToSearchFor: Option<Vec<String>>,

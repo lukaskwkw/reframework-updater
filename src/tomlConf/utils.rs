@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use error_stack::{IntoReport, Result, ResultExt};
+use log::warn;
 use toml::Value;
+
+use crate::{tomlConf::configStruct::ErrorLevel, MAX_ZIP_FILES_PER_GAME_CACHE};
 
 use super::{
     configStruct::{ConfigError, GameConfig, Main, REvilConfig},
@@ -43,6 +46,9 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
 }
 
 pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameConfig>)> {
+    // TODO when there will be wrong toml syntax in config file for particular key then it will be treated
+    //      like config file error and all config.toml content will be altered with new content
+    //      not sure how to handle it differently -> priority very minor, it can be too much hassle I think. Also below I handle some errors too
     let value = content
         .parse::<Value>()
         .report()
@@ -59,10 +65,17 @@ pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameCon
             .report()
             .attach_printable("Main not found!")?,
     };
-
-    let main: Main = Value::from_value(main_value.to_owned())
-        .report()
-        .change_context(ConfigError::Deserializer)?;
+    let main = Value::from_value(main_value.to_owned()).unwrap_or_else(|err| {
+        eprintln!(
+            "Error during deserialization of toml main section {:#?} setting default for main",
+            err
+        );
+        Main {
+            max_cache_versions_per_game: Some(MAX_ZIP_FILES_PER_GAME_CACHE),
+            errorLevel: Some(ErrorLevel::info),
+            ..Main::default()
+        }
+    });
 
     let games = table
         .iter()
