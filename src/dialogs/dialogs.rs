@@ -214,6 +214,7 @@ impl Ask for Dialogs {
             );
         });
         let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
+        selections.sort();
         selections.push(SwitchRuntimeSection.to_label());
         selections.push(LoadDifferentVersionFromCache.to_label());
         if any_game_that_support_2_versions {
@@ -321,6 +322,7 @@ impl Ask for Dialogs {
                 })
             }
         });
+        selections.sort();
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
@@ -373,7 +375,7 @@ impl Ask for Dialogs {
                 label
             })
             .collect();
-
+        selections.sort();
         selections.push(Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select game to switch".to_string())
@@ -445,6 +447,7 @@ impl Ask for Dialogs {
         }
         let mut selections: Vec<String> =
             sels_h_map.iter().map(|(label, _)| label.clone()).collect();
+        selections.sort();
         selections.push(Back.to_label());
 
         let selection = Select::with_theme(&ColorfulTheme::default())

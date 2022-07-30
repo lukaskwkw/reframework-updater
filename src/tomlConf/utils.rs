@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use error_stack::{IntoReport, Result, ResultExt};
-use log::warn;
 use toml::Value;
 
 use crate::{tomlConf::configStruct::ErrorLevel, MAX_ZIP_FILES_PER_GAME_CACHE};
@@ -21,8 +20,13 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
             format!("Error during serialization of main {:?}", &config.main)
         })?;
 
-    let config_str = config
+    let mut games_vec: Vec<_> = config
         .games
+        .iter()
+        .collect();
+        games_vec.sort_by_key(|tuple| tuple.0.to_string());
+        
+        let config_str = games_vec
         .iter()
         .map(|(key, value)| {
             let config_str = toml::to_string_pretty(&value)
@@ -48,7 +52,7 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
 pub fn deserialize(content: &str) -> ConfigResult<(Main, HashMap<String, GameConfig>)> {
     // TODO when there will be wrong toml syntax in config file for particular key then it will be treated
     //      like config file error and all config.toml content will be altered with new content
-    //      not sure how to handle it differently -> priority very minor, it can be too much hassle I think. Also below I handle some errors too
+    //      not sure how to handle it differently -> priority very minor, it can be too much hassle I think. Also below I already handle some errors
     let value = content
         .parse::<Value>()
         .report()
