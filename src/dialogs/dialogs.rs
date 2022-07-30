@@ -10,23 +10,25 @@ use self_update::update::ReleaseAsset;
 
 use crate::{
     dialogs::dialogs_label::{LabelOptions, SWITCH_RUNTIME_PART},
-    rManager::rManager_header::{
+    rManager::{rManager_header::{
         REvilManager, REvilManagerState, ResultManagerErr, SORT_DETERMINER,
-    },
+    }, rManager::UPDATE_IDENTIFIER},
+    reframework_github::refr_github::AssetsReport,
     tomlConf::configStruct::{REvilConfig, ShortGameName, SteamId},
     utils::{
         find_game_conf_by_steam_id::find_game_conf_by_steam_id,
         get_local_path_to_cache::get_local_path_to_cache_folder, is_asset_tdb::is_asset_tdb,
     },
-    STANDARD_TYPE_QUALIFIER, reframework_github::refr_github::AssetsReport, GAMES_NEXTGEN_SUPPORT,
+    GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER,
 };
 
-#[derive(Debug, Default)]
+#[derive(PartialEq, Debug, Default)]
 pub enum DialogsErrors {
     #[default]
     Other,
     GameNotFoundForGivenSteamId(String),
     NoGamesToUpdate,
+    NoCacheFile(ShortGameName),
 }
 // TODO Fill above structs with more errors rather than just using Other everywhere.
 
@@ -42,9 +44,10 @@ pub type ResultDialogsErr<T> = Result<T, DialogsErrors>;
 
 #[cfg_attr(test, automock)]
 pub trait Ask {
-    fn ask_for_runtime_decision_and_change_it(&mut self,
+    fn ask_for_runtime_decision_and_change_it(
+        &mut self,
         config: &mut REvilConfig,
-        state: &mut REvilManagerState
+        state: &mut REvilManagerState,
     ) -> ResultDialogsErr<()>;
     fn ask_for_decision_and_populate_selected_assets(
         &mut self,
@@ -83,11 +86,19 @@ impl Ask for Dialogs {
         state: &mut REvilManagerState,
         report: &HashMap<String, Vec<ReleaseAsset>>,
     ) -> ResultDialogsErr<()> {
-        let (different_found, any_not_installed_mods_with_both_ver_supporting, game_decisions) = &self
-            .prepare_decision_report(config, state, report)
-            .change_context(DialogsErrors::Other)?;
+        let (different_found, any_not_installed_mods_with_both_ver_supporting, game_decisions) =
+            &self
+                .prepare_decision_report(config, state, report)
+                .change_context(DialogsErrors::Other)?;
         let mut selections = vec![];
-        if populate_selections_with_general_options(game_decisions, &mut selections, different_found, any_not_installed_mods_with_both_ver_supporting).is_none() {
+        if populate_selections_with_general_options(
+            game_decisions,
+            &mut selections,
+            different_found,
+            any_not_installed_mods_with_both_ver_supporting,
+        )
+        .is_none()
+        {
             info!("Not found any games to update");
             return Err(Report::new(DialogsErrors::NoGamesToUpdate));
         }
@@ -125,7 +136,15 @@ impl Ask for Dialogs {
             return Ok(());
         }
 
-        if populate_selected_assets_base_on_general_option(sel, game_decisions, state, different_found, any_not_installed_mods_with_both_ver_supporting).is_some() {
+        if populate_selected_assets_base_on_general_option(
+            sel,
+            game_decisions,
+            state,
+            different_found,
+            any_not_installed_mods_with_both_ver_supporting,
+        )
+        .is_some()
+        {
             return Ok(());
         }
 
@@ -147,36 +166,51 @@ impl Ask for Dialogs {
 
         let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
         let mut any_game_that_support_2_versions = false;
-        config.games.iter().for_each(|(short_name, game)| {
-            if !any_game_that_support_2_versions && GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..]) {
+        config.games.iter().for_each(|(short_name, game_config)| {
+            if !any_game_that_support_2_versions && GAMES_NEXTGEN_SUPPORT.contains(&&short_name[..])
+            {
                 any_game_that_support_2_versions = true;
             }
-            let ver_in_use = game.version_in_use.as_ref().map(|ver| ver.to_string()).unwrap_or_default();
-            // TODO below should add <cache> string to game if it is loaded from cache but should be fixed
-            //      as for now it will show <cache> for games that only has one version or version_in_use is not later in array
-            //      there should be first check versions.any() if version_in_use is later in array and then check for first
-            // let version_part = game.versions.as_ref()
-            //     .and_then(|versions| versions.first())
-            //     .and_then(|first_set| first_set.first())
-            //     .map(|ver| ver == &ver_in_use)
-            //     .and_then(|is_same_as_latest| is_same_as_latest.then(|| ver_in_use.clone()))
-            //     .unwrap_or_else(|| format!("{} <cache>", ver_in_use.clone()));
-
-           selections_h_map.insert(
+            let mut ver_in_use = game_config
+                .version_in_use
+                .as_ref()
+                .map(|ver| ver.to_string())
+                .unwrap_or_default();
+            if game_config
+                .versions
+                .as_ref()
+                .unwrap()
+                .iter()
+                .skip(1)
+                .any(|ver_set| {
+                    ver_set
+                        .first()
+                        .map(|ver| ver == game_config.version_in_use.as_ref().unwrap())
+                        .unwrap_or_default()
+                        && ver_set.len() > 1
+                })
+            {
+                ver_in_use = format!("{} <no_latest_cache>", ver_in_use);
+            }
+            // no_latest_cache means that version has cache files but it is not latest one
+            selections_h_map.insert(
                 format!(
                     "Run {}{} - <{:?}> {}",
                     short_name,
-                    game.nextgen.map(|nextgen| {
-                        if nextgen {
-                            " <Nextgen>"
-                        } else {
-                            " <Standard>"
-                        }
-                    }).unwrap_or_default(),
-                    game.runtime.as_ref().unwrap(),
+                    game_config
+                        .nextgen
+                        .map(|nextgen| {
+                            if nextgen {
+                                " <Nextgen>"
+                            } else {
+                                " <Standard>"
+                            }
+                        })
+                        .unwrap_or_default(),
+                    game_config.runtime.as_ref().unwrap(),
                     ver_in_use
                 ),
-                game.steamId.as_ref().unwrap(),
+                game_config.steamId.as_ref().unwrap(),
             );
         });
         let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
@@ -215,7 +249,7 @@ impl Ask for Dialogs {
             LoadDifferentVersionFromCache => {
                 state.selected_option = Some(LoadDifferentVersionFromCache);
                 return Ok(());
-            },
+            }
             GoTop => {
                 state.selected_option = Some(GoTop);
                 return Ok(());
@@ -242,7 +276,10 @@ impl Ask for Dialogs {
         config.games.iter().for_each(|(short_name, game_config)| {
             let versions = game_config.versions.as_ref();
             if versions.is_none() {
-                info!("Not found any version records for {}. Please download one first", short_name);
+                info!(
+                    "Not found any version records for {}. Please download one first",
+                    short_name
+                );
                 return;
             }
             let versions = versions.unwrap();
@@ -287,9 +324,12 @@ impl Ask for Dialogs {
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.push(Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(r"Select game and its mod version to switch. 
+            .with_prompt(
+                r"Select game and its mod version to switch. 
                 Note TDB = standard version if game supports standard/nextgen 
-                where non TDB = Nextgen version ".to_string())
+                where non TDB = Nextgen version "
+                    .to_string(),
+            )
             .default(0)
             .items(&selections[..])
             .interact()
@@ -350,7 +390,7 @@ impl Ask for Dialogs {
             SwitchToStandard(short_name) | SwitchToNextgen(short_name) => {
                 debug!("Selected -> {:#?}", short_name);
                 let game_config = config.games.get(&short_name).unwrap();
-                
+
                 if !state.games_that_require_update.contains(&short_name) {
                     let next_gen = game_config.nextgen.unwrap();
                     let versions = game_config.versions.as_ref().unwrap();
@@ -375,16 +415,18 @@ impl Ask for Dialogs {
                             .map(|path| path.join(second_asset_name))
                             .map_err(|_| Report::new(DialogsErrors::Other))?;
                         if !path_to_zip.exists() {
-                            return Ok(UnsetNonExistentToggleNRestart(short_name, second_asset_name.to_string()));
+                            return Ok(UnsetNonExistentToggleNRestart(
+                                short_name,
+                                second_asset_name.to_string(),
+                            ));
                         }
                         return Ok(ToggleNUnzipSave(short_name, second_asset_name.clone()));
                     }
-
                 } else {
                     debug!("Game {} requires update anyway", short_name);
                     return Ok(ToggleNSaveRestart(short_name));
                 }
-                
+
                 return Ok(ToggleNSetSwitchSaveRestart(short_name));
             }
             _ => (),
@@ -392,35 +434,17 @@ impl Ask for Dialogs {
         Ok(Early)
     }
 
-    fn ask_for_runtime_decision_and_change_it(&mut self, config: &mut REvilConfig, state: &mut REvilManagerState) -> ResultDialogsErr<()> {
-        let mut selections_h_map: HashMap<String, &SteamId> = HashMap::new();
-        config.games.iter().for_each(|(short_name, game)| {
-        game.versions
-                .as_ref()
-                .and_then(|versions| {
-                    // TODO now if loaded from cache and if latest version doesn't have zip assets in vector even when version_in_use is different and has, game won't show on list
-                    //      to fix this we need to replace this condition here with searching in array for cache
-                    //      tip: check rManager->rescan_option for find and use game.version_in_use to comparison
-                    (versions.first().unwrap().len() > 1 && game.runtime.is_some()).then(|| {
-                        selections_h_map.insert(
-                            format!(
-                                "{} <{:?}> for {}",
-                                SWITCH_RUNTIME_PART,
-                                game.runtime.as_ref().unwrap().as_opposite(),
-                                short_name
-                            ),
-                            game.steamId.as_ref().unwrap(),
-                        );
-                        
-                    })
-                })
-                .unwrap_or_default();
-            });
-        if selections_h_map.is_empty() {
-            info!("Please download mod for particular game to be able to switch between runtime");
-
+    fn ask_for_runtime_decision_and_change_it(
+        &mut self,
+        config: &mut REvilConfig,
+        state: &mut REvilManagerState,
+    ) -> ResultDialogsErr<()> {
+        let sels_h_map = get_selections_for_runtime_switch(config);
+        if sels_h_map.is_empty() {
+            info!("Not found any compatible games");
         }
-        let mut selections: Vec<String> = selections_h_map.keys().cloned().collect();
+        let mut selections: Vec<String> =
+            sels_h_map.iter().map(|(label, _)| label.clone()).collect();
         selections.push(Back.to_label());
 
         let selection = Select::with_theme(&ColorfulTheme::default())
@@ -436,35 +460,94 @@ impl Ask for Dialogs {
             Back => {
                 state.selected_option = Some(Back);
                 return Ok(());
-            },
+            }
             _ => {}
         }
-        let selected_steam_id = selections_h_map
-            .get(&selections[selection])
-            .unwrap()
-            .clone()
-            .to_string();
+        let selected_steam_id = sels_h_map
+            .iter()
+            .find_map(|(label, steam_id)| {
+                (label == &selections[selection]).then_some(steam_id.to_string())
+            })
+            .unwrap();
         let (game_short_name, _) = find_game_conf_by_steam_id(config, &selected_steam_id)
             .change_context(DialogsErrors::GameNotFoundForGivenSteamId(
                 selected_steam_id.clone(),
             ))?;
         let game_short_name = game_short_name.clone();
-        let game_config = config.games.get_mut(&game_short_name);
-        let conf = game_config.unwrap();
-        let runtime = conf.runtime.as_ref().unwrap();
-        info!(
-            "Switched runtime from {:?} to {:?} for {}",
-            runtime,
-            runtime.as_opposite(),
-            game_short_name
-        );
-        conf.runtime = Some(runtime.as_opposite());
+        let game_config = config.games.get_mut(&game_short_name).unwrap();
+
+        if let Some(runtime) = game_config.runtime.as_ref() {
+            info!(
+                "Switched runtime from {:?} to {:?} for {}",
+                runtime,
+                runtime.as_opposite(),
+                game_short_name
+            );
+            game_config.runtime = Some(runtime.as_opposite());
+        }
+        if let None = game_config
+            .versions
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|ver_set| {
+                ver_set
+                    .first()
+                    .map(|ver| ver == game_config.version_in_use.as_ref().unwrap())
+                    .unwrap_or_default()
+                    && ver_set.len() > 1
+            })
+        {
+            info!("Mod version has no cache file I will download latest version");
+            if let Some(latest_version) = game_config
+                .versions
+                .as_mut()
+                .and_then(|versions| versions.first_mut())
+                .and_then(|ver| ver.first_mut())
+            {
+                *latest_version = UPDATE_IDENTIFIER.to_string();
+            }
+
+            return Err(Report::new(DialogsErrors::NoCacheFile(game_short_name)));
+        }
+
         state.selected_option = Some(Back);
         Ok(())
     }
 }
 
-pub fn populate_selections_with_general_options(game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>, selections: &mut Vec<String>, different_found: &bool, any_not_installed_mods_with_both_ver_supporting: &bool) -> Option<()> {
+fn get_selections_for_runtime_switch(config: &REvilConfig) -> Vec<(String, &String)> {
+    let sels_h_map: Vec<(String, &SteamId)> = config
+        .games
+        .iter()
+        .filter_map(|(short_name, game)| {
+            if let (Some(_versions), Some(runtime), Some(steam_id)) = (
+                game.versions.as_ref(),
+                game.runtime.as_ref(),
+                game.steamId.as_ref(),
+            ) {
+                return Some((
+                    format!(
+                        "{} <{:?}> for {}",
+                        SWITCH_RUNTIME_PART,
+                        runtime.as_opposite(),
+                        short_name
+                    ),
+                    steam_id,
+                ));
+            }
+            None
+        })
+        .collect();
+    sels_h_map
+}
+
+pub fn populate_selections_with_general_options(
+    game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>,
+    selections: &mut Vec<String>,
+    different_found: &bool,
+    any_not_installed_mods_with_both_ver_supporting: &bool,
+) -> Option<()> {
     if !game_decisions.is_empty() {
         selections.push(UpdateAllGames.to_label());
         if *different_found && !*any_not_installed_mods_with_both_ver_supporting {
@@ -482,7 +565,13 @@ pub fn populate_selections_with_general_options(game_decisions: &HashMap<String,
     };
 }
 
-pub fn populate_selected_assets_base_on_general_option(sel: LabelOptions, game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>, state: &mut REvilManagerState, different_found: &bool, any_not_installed_mods_with_both_ver_supporting: &bool) -> Option<()> {
+pub fn populate_selected_assets_base_on_general_option(
+    sel: LabelOptions,
+    game_decisions: &HashMap<String, (ReleaseAsset, Option<bool>, Option<String>)>,
+    state: &mut REvilManagerState,
+    different_found: &bool,
+    any_not_installed_mods_with_both_ver_supporting: &bool,
+) -> Option<()> {
     if sel != Skip && sel != Other {
         game_decisions.values().for_each(|(asset, include, _)| {
             if include.is_some() {
@@ -535,7 +624,8 @@ impl Dialogs {
         let mut different_found = false;
         // it checks if any nextgen supported game doesn't have nextgen type set - treating like mod is not installed
         let mut is_any_game_support_sec_version_but_mod_is_not_installed = false;
-        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> = HashMap::new();
+        let mut games: HashMap<String, (ReleaseAsset, Option<bool>, Option<SteamId>)> =
+            HashMap::new();
 
         assets_report.iter().for_each(|(game_short_name, assets)| {
             if !state.games_that_require_update.contains(game_short_name) {
@@ -588,7 +678,7 @@ impl Dialogs {
                     })
                     .unwrap_or_else(|| {
                         debug!("asset is not TDB nor Nextgen");
-                         (game_short_name.to_string(), Some(true), false, false) 
+                        (game_short_name.to_string(), Some(true), false, false)
                     });
 
                 // ifs are needed because we want to assign it only for true 
@@ -620,12 +710,33 @@ impl Dialogs {
 fn set_label_for_download_switch(text: &mut String, next_or_std: &str, next_or_std_sec: &str) {
     *text = format!(
         "{}      {}(your current version of mod is {} -> it will switch to {})",
-        text,
-        SORT_DETERMINER,
-        next_or_std,
-        next_or_std_sec
+        text, SORT_DETERMINER, next_or_std, next_or_std_sec
     );
 }
 
 #[cfg(test)]
 mod download_decision_tests;
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::init_dialogs_mock::init_dialogs_mocks;
+
+    use super::*;
+
+    #[test]
+    fn should_get_correct_selections_for_runtime_switch() {
+        let (_, config, _, _) = init_dialogs_mocks();
+        let mut selections = get_selections_for_runtime_switch(&config);
+        selections.sort();
+        assert_eq!(selections.len(), 2);
+        let expected = [
+            ("Switch runtime to <OpenVR> for RE2".to_string(), "883710"),
+            ("Switch runtime to <OpenVR> for RE3".to_string(), "952060"),
+        ]
+        .to_vec();
+        assert_eq!(expected[0].0, selections[0].0);
+        assert_eq!(expected[0].1, selections[0].1);
+        assert_eq!(expected[1].0, selections[1].0);
+        assert_eq!(expected[1].1, selections[1].1);
+    }
+}

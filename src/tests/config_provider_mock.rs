@@ -44,7 +44,7 @@ pub mod mock_conf_provider {
 
         [RE7]
         location = "D:/steam/games/RE7"
-    
+
         [RE8]
         location = "D:/steam/games/RE8"
         version_in_use = "v1.71-abd3145"

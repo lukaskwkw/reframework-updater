@@ -1,9 +1,3 @@
-
-
-
-
-
-
 use crate::{
     dialogs::{
         dialogs::{
@@ -11,18 +5,15 @@ use crate::{
             populate_selections_with_general_options,
         },
         dialogs_label::LabelOptions,
-    },
+    }, tests::init_dialogs_mock::init_dialogs_mocks,
 };
-
-
-mod init_dialogs_mock;
 
 use LabelOptions::*;
 
 #[test]
 fn for_4_games() {
     println!("Given 4 games to update, all different types of, should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -105,7 +96,7 @@ fn for_4_games() {
 #[test]
 fn for_4_games_and_chosen_prefer_standard_decision() {
     println!("Given 4 games to update, different types of, and chosen standard decision - should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -141,7 +132,7 @@ fn for_4_games_and_chosen_prefer_standard_decision() {
 #[test]
 fn for_4_games_and_chosen_prefer_nextgen_decision() {
     println!("Given 4 games to update, different types of, and chosen nextgen decision - should pass assertions");
-    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
     state.games_that_require_update.push("RE7".to_string());
@@ -178,7 +169,7 @@ fn for_4_games_and_chosen_prefer_nextgen_decision() {
 #[test]
 fn for_2_games() {
     println!("Given 2 games to update, one can support nextgen second not");
-    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mocks();
 
     state.games_that_require_update.push("RE2".to_string());
     state.games_that_require_update.push("RE8".to_string());
@@ -205,7 +196,7 @@ fn for_2_games() {
 #[test]
 fn for_1_game() {
     println!("Given 1 game to update not supporting nextgen version");
-    let (assets_report, config, mut state, dialogs) = init_dialogs_mock::init_dialogs_mocks();
+    let (assets_report, config, mut state, dialogs) = init_dialogs_mocks();
 
     state.games_that_require_update.push("RE8".to_string());
 

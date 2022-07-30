@@ -48,6 +48,7 @@ use indicatif::ProgressBar;
 use super::rManager_header::AfterUnzipOption;
 
 pub static SWITCH_IDENTIFIER: &str = "switch";
+pub static UPDATE_IDENTIFIER: &str = "update_me";
 
 impl REvilManager {
     pub fn new(
@@ -596,9 +597,21 @@ impl REvilThings for REvilManager {
         {
             return Ok(self);
         }
-        self.dialogs
+        if let Err(err) = self
+            .dialogs
             .ask_for_runtime_decision_and_change_it(&mut self.config, &mut self.state)
-            .change_context(REvilManagerError::Other)?;
+        {
+            match err.current_context() {
+                DialogsErrors::NoCacheFile(game_short_name) => {
+                    self.save_config()?;
+                    restart_program(RunAfter::no, game_short_name.to_string())
+                        .report()
+                        .change_context(REvilManagerError::ErrorRestartingProgram)?
+                }
+                _ => return Err(err).change_context(REvilManagerError::Other),
+            }
+        };
+
         self.save_config()?;
         Ok(self)
     }
@@ -775,7 +788,7 @@ impl REvilThings for REvilManager {
             version_vec = maybe_vec.unwrap();
         }
         if version_vec.len() < 2 {
-            debug!("Mod version has no cache file");
+            warn!("Mod version has no cache file");
             return Ok(game_short_name.to_string());
         }
         let game_dir = game_config
@@ -953,7 +966,6 @@ impl REvilThings for REvilManager {
                         // if there is not in versions then push this hash as a version
                         versions.insert(0, [local_ver_hash.to_string()].to_vec());
                         config.version_in_use = Some(local_ver_hash);
-                        // TODO check if below works
                         if versions.len() > MAX_ZIP_FILES_PER_GAME_CACHE.into() {
                             let last_ver = versions.last().unwrap();
                             cleanup_cache(last_ver, short_name)?;
@@ -1141,7 +1153,7 @@ fn add_asset_ver_to_game_conf_ver(
     asset: &ReleaseAsset,
 ) {
     debug!("Adding asset {}", &asset.name);
-    let version_and_switch = game_config.versions.as_ref().map(|versions| {
+    let version_and_should_replace = game_config.versions.as_ref().map(|versions| {
         let first_set = versions.first().unwrap();
         if first_set[0] == SWITCH_IDENTIFIER {
             if first_set.len() > 1 {
@@ -1160,6 +1172,9 @@ fn add_asset_ver_to_game_conf_ver(
                 debug!("switch has no assets");
                 ([version.to_string(), asset.name.to_string()].to_vec(), true)
             }
+        } else if first_set[0] == UPDATE_IDENTIFIER {
+            debug!("Update identifier");
+            ([version.to_string(), asset.name.to_string()].to_vec(), true)
         } else {
             debug!("no switch asset {}", asset.name);
             (
@@ -1168,7 +1183,7 @@ fn add_asset_ver_to_game_conf_ver(
             )
         }
     });
-    if let Some(version_and_switch) = version_and_switch {
+    if let Some(version_and_switch) = version_and_should_replace {
         let (version, switch) = version_and_switch;
         let versions = game_config.versions.as_mut().unwrap();
 

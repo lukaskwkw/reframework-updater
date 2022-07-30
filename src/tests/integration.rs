@@ -199,13 +199,15 @@ pub mod tests {
         games.iter().for_each(|short_name| {
             let (
                 mut steam_menago,
-                local_provider_mock,
+                mut local_provider_mock,
                 _,
                 mut config_provider_mock,
                 _ctx,
                 mock_reft_constr,
             ) = init_manager_mocks();
-
+            local_provider_mock
+                .expect_get_local_report_for_game()
+                .never();
             config_provider_mock
                 .expect_load_from_file()
                 .returning(load_from_file_default_return_mock());
@@ -355,3 +357,4 @@ pub mod tests {
         })
     }
 }
+// TODO maybe test where there is a new steam discovery i.e. move out game_path_vec from steam_mock to pub fn and then for new one concatenate with desired vec 

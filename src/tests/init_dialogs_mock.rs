@@ -3,6 +3,7 @@ use crate::tomlConf::config::ConfigProvider;
 use crate::tests::config_provider_mock::mock_conf_provider::{get_config_provider_mock, load_from_file_default_return_mock};
 
 use crate::tests::refr_github_mock::prepare_refr_github_mock_and_get_constr;
+use crate::utils::init_logger::init_logger;
 
 use super::super::Dialogs;
 
