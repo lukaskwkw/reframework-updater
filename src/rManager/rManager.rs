@@ -610,11 +610,11 @@ impl REvilThings for REvilManager {
         {
             return Ok(self);
         }
-        if let Err(err) = self
+        match self
             .dialogs
             .ask_for_runtime_decision_and_change_it(&mut self.config, &mut self.state)
         {
-            match err.current_context() {
+            Err(err) => match err.current_context() {
                 DialogsErrors::NoCacheFile(game_short_name) => {
                     self.save_config()?;
                     restart_program(RunAfter::no, game_short_name.to_string())
@@ -622,7 +622,18 @@ impl REvilThings for REvilManager {
                         .change_context(REvilManagerError::ErrorRestartingProgram)?
                 }
                 _ => return Err(err).change_context(REvilManagerError::Other),
+            },
+            Ok(Some((pos, game_short_name))) => {
+                // unwraps below are ok as arguments passed from dialogs functions correspond to these
+                let game_config = self.config.games.get(&game_short_name).unwrap();
+                let version_vec = game_config.versions.as_ref().unwrap().get(pos).unwrap();
+                self.unzip_runtime_file_from_correct_version(
+                    game_config,
+                    version_vec,
+                    &game_short_name,
+                )?;
             }
+            _ => (),
         };
 
         self.save_config()?;
@@ -804,43 +815,7 @@ impl REvilThings for REvilManager {
             warn!("Mod version has no cache file");
             return Ok(game_short_name.to_string());
         }
-        let game_dir = game_config
-            .location
-            .as_ref()
-            .ok_or_else(|| Report::new(REvilManagerError::GameLocationMissing))?;
-        let game_dir = Path::new(&game_dir);
-
-        let runtime = game_config.runtime.as_ref().unwrap();
-        if !game_dir.join(runtime.as_local_dll()).exists() {
-            let should_skip_all_except = |file: &OsStr| file != OsStr::new(&runtime.as_local_dll());
-            let ver = &version_vec[0];
-
-            let file_name = version_vec.iter().skip(1).find(|name| {
-                is_asset_tdb(
-                    game_short_name,
-                    &ReleaseAsset {
-                        name: name.to_string(),
-                        ..Default::default()
-                    },
-                )
-                .and_then(|is_tdb| game_config.nextgen.map(|nextgen| (is_tdb, nextgen)))
-                .map(|(is_tdb, nextgen)| (is_tdb && !nextgen) || (!is_tdb && nextgen)) // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
-                .unwrap_or(true)
-            });
-
-            // TODO should be safe to unwrap below but maybe some tests?
-            let file_name = file_name.unwrap();
-
-            self.unzip_update(
-                game_short_name,
-                file_name,
-                Some(ver),
-                Some(should_skip_all_except),
-            )?;
-            info!("Unzipped only {} file", runtime.as_local_dll());
-        }
-
-        remove_second_runtime_file(game_config)?;
+        self.unzip_runtime_file_from_correct_version(game_config, version_vec, game_short_name)?;
 
         info!("Before launch procedure - end");
         Ok(game_short_name.to_string())
@@ -1009,6 +984,52 @@ impl REvilThings for REvilManager {
         trace!("Full config: \n {:#?}", self.config);
         self.save_config()?;
         Ok(self)
+    }
+}
+
+impl REvilManager {
+    fn unzip_runtime_file_from_correct_version(
+        &self,
+        game_config: &GameConfig,
+        version_vec: &Vec<String>,
+        game_short_name: &String,
+    ) -> ResultManagerErr<()> {
+        let game_dir = game_config
+            .location
+            .as_ref()
+            .ok_or_else(|| Report::new(REvilManagerError::GameLocationMissing))?;
+        let game_dir = Path::new(&game_dir);
+        let runtime = game_config.runtime.as_ref().unwrap();
+        if !game_dir.join(runtime.as_local_dll()).exists() {
+            let should_skip_all_except = |file: &OsStr| file != OsStr::new(&runtime.as_local_dll());
+            let ver = &version_vec[0];
+
+            let file_name = version_vec.iter().skip(1).find(|name| {
+                is_asset_tdb(
+                    game_short_name,
+                    &ReleaseAsset {
+                        name: name.to_string(),
+                        ..Default::default()
+                    },
+                )
+                .and_then(|is_tdb| game_config.nextgen.map(|nextgen| (is_tdb, nextgen)))
+                .map(|(is_tdb, nextgen)| (is_tdb && !nextgen) || (!is_tdb && nextgen)) // if asset is none TDB/NG or nextgen field is missing then just return 1 st item
+                .unwrap_or(true)
+            });
+
+            // TODO should be safe to unwrap below but maybe some tests?
+            let file_name = file_name.unwrap();
+
+            self.unzip_update(
+                game_short_name,
+                file_name,
+                Some(ver),
+                Some(should_skip_all_except),
+            )?;
+            info!("Unzipped only {} file", runtime.as_local_dll());
+        }
+        remove_second_runtime_file(game_config)?;
+        Ok(())
     }
 }
 

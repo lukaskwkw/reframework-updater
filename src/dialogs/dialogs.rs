@@ -10,9 +10,10 @@ use self_update::update::ReleaseAsset;
 
 use crate::{
     dialogs::dialogs_label::{LabelOptions, SWITCH_RUNTIME_PART},
-    rManager::{rManager_header::{
-        REvilManager, REvilManagerState, ResultManagerErr, SORT_DETERMINER,
-    }, rManager::UPDATE_IDENTIFIER},
+    rManager::{
+        rManager::UPDATE_IDENTIFIER,
+        rManager_header::{REvilManager, REvilManagerState, ResultManagerErr, SORT_DETERMINER},
+    },
     reframework_github::refr_github::AssetsReport,
     tomlConf::configStruct::{REvilConfig, ShortGameName, SteamId},
     utils::{
@@ -42,13 +43,14 @@ impl Error for DialogsErrors {}
 
 pub type ResultDialogsErr<T> = Result<T, DialogsErrors>;
 
+static MAX_LENGTH_FOR_CACHE_LABELS: u8 = 6;
 #[cfg_attr(test, automock)]
 pub trait Ask {
     fn ask_for_runtime_decision_and_change_it(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
-    ) -> ResultDialogsErr<()>;
+    ) -> ResultDialogsErr<Option<(usize, ShortGameName)>>;
     fn ask_for_decision_and_populate_selected_assets(
         &mut self,
         config: &mut REvilConfig,
@@ -324,7 +326,7 @@ impl Ask for Dialogs {
         });
         selections.sort();
         selections.sort_by(|a, b| REvilManager::sort(a, b));
-        selections.push(Back.to_label());
+        selections.insert(0, Back.to_label());
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(
                 r"Select game and its mod version to switch. 
@@ -333,6 +335,7 @@ impl Ask for Dialogs {
                     .to_string(),
             )
             .default(0)
+            .max_length(MAX_LENGTH_FOR_CACHE_LABELS.into())
             .items(&selections[..])
             .interact()
             .unwrap();
@@ -435,12 +438,12 @@ impl Ask for Dialogs {
         };
         Ok(Early)
     }
-
+    
     fn ask_for_runtime_decision_and_change_it(
         &mut self,
         config: &mut REvilConfig,
         state: &mut REvilManagerState,
-    ) -> ResultDialogsErr<()> {
+    ) -> ResultDialogsErr<Option<(usize, ShortGameName)>> {
         let sels_h_map = get_selections_for_runtime_switch(config);
         if sels_h_map.is_empty() {
             info!("Not found any compatible games");
@@ -462,7 +465,7 @@ impl Ask for Dialogs {
         match LabelOptions::from(&selected_text[..]) {
             Back => {
                 state.selected_option = Some(Back);
-                return Ok(());
+                return Ok(None);
             }
             _ => {}
         }
@@ -478,6 +481,7 @@ impl Ask for Dialogs {
             ))?;
         let game_short_name = game_short_name.clone();
         let game_config = config.games.get_mut(&game_short_name).unwrap();
+        state.selected_option = Some(Back);
 
         if let Some(runtime) = game_config.runtime.as_ref() {
             info!(
@@ -488,12 +492,12 @@ impl Ask for Dialogs {
             );
             game_config.runtime = Some(runtime.as_opposite());
         }
-        if let None = game_config
+        if let Some(pos) = game_config
             .versions
             .as_ref()
             .unwrap()
             .iter()
-            .find(|ver_set| {
+            .position(|ver_set| {
                 ver_set
                     .first()
                     .map(|ver| ver == game_config.version_in_use.as_ref().unwrap())
@@ -501,6 +505,8 @@ impl Ask for Dialogs {
                     && ver_set.len() > 1
             })
         {
+            return Ok(Some((pos, game_short_name)));
+        } else {
             info!("Mod version has no cache file I will download latest version");
             if let Some(latest_version) = game_config
                 .versions
@@ -513,9 +519,6 @@ impl Ask for Dialogs {
 
             return Err(Report::new(DialogsErrors::NoCacheFile(game_short_name)));
         }
-
-        state.selected_option = Some(Back);
-        Ok(())
     }
 }
 
