@@ -1449,7 +1449,7 @@ pub mod tests {
             &"1234567".to_string()
         );
         let re8_config = evil_manager.config.games.get("RE8").unwrap();
-        assert_eq!(re8_config.version_in_use, Some("v1.71-abd3145".to_string()));
+        assert_eq!(re8_config.version_in_use, Some("some123".to_string()));
         assert_eq!(re8_config.nextgen, None);
         assert_eq!(re8_config.runtime, Some(Runtime::OpenVR));
         assert_eq!(

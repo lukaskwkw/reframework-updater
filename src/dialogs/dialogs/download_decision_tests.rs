@@ -5,7 +5,8 @@ use crate::{
             populate_selections_with_general_options,
         },
         dialogs_label::LabelOptions,
-    }, tests::init_dialogs_mock::init_dialogs_mocks,
+    },
+    tests::init_dialogs_mock::init_dialogs_mocks,
 };
 
 use LabelOptions::*;

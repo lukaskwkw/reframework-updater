@@ -20,6 +20,7 @@ pub mod reframework_github {
     pub mod release;
 }
 mod utils {
+    pub mod open_dialog;
     pub mod binSearch;
     pub mod fetch;
     pub mod find_game_conf_by_steam_id;

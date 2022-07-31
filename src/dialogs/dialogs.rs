@@ -3,11 +3,15 @@ use mockall::automock;
 
 use std::{collections::HashMap, error::Error};
 
-use dialoguer::{theme::ColorfulTheme, Select};
-use error_stack::{Report, Result, ResultExt};
+use dialoguer::theme::ColorfulTheme;
+use error_stack::{IntoReport, Report, Result, ResultExt};
 use log::{debug, info, warn};
 use self_update::update::ReleaseAsset;
 
+#[cfg(test)]
+use crate::utils::open_dialog::mock_open_dialog as open_dialog;
+#[cfg(not(test))]
+use crate::utils::open_dialog::open_dialog;
 use crate::{
     dialogs::dialogs_label::{LabelOptions, SWITCH_RUNTIME_PART},
     rManager::{
@@ -29,6 +33,7 @@ pub enum DialogsErrors {
     Other,
     GameNotFoundForGivenSteamId(String),
     NoGamesToUpdate,
+    OpenDialogError,
     NoCacheFile(ShortGameName),
 }
 // TODO Fill above structs with more errors rather than just using Other everywhere.
@@ -118,13 +123,8 @@ impl Ask for Dialogs {
              Chose which mod type use for them. For other games program will use correct version.";
         }
         selections.push(Skip.to_label());
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text))
-            .default(0)
-            .items(&selections[..])
-            .interact()
-            .unwrap();
-
+        // let selection = open_dialog::OpenDialog(&selections ,&format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text), None)?;
+        let selection = open_dialog::open_dialog(&selections ,&format!("I found {} games that require update. Select which one you want to update or select all. {}", count, additional_text), None).unwrap();
         debug!(
             "selection {}, different_found {}, any_none {}",
             selection, different_found, any_not_installed_mods_with_both_ver_supporting
@@ -226,12 +226,8 @@ impl Ask for Dialogs {
         selections.push(GoTop.to_label());
         selections.push(Exit.to_label());
 
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select game to run".to_string())
-            .default(0)
-            .items(&selections[..])
-            .interact()
-            .unwrap();
+        let selection =
+            open_dialog::open_dialog(&selections, "Select game to run or other options", None)?;
 
         let selected_text = &selections[selection];
 
@@ -327,18 +323,14 @@ impl Ask for Dialogs {
         selections.sort();
         selections.sort_by(|a, b| REvilManager::sort(a, b));
         selections.insert(0, Back.to_label());
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(
-                r"Select game and its mod version to switch. 
+        let selection = open_dialog::open_dialog(
+            &selections,
+            r"Select game and its mod version to switch. 
                 Note TDB = standard version if game supports standard/nextgen 
-                where non TDB = Nextgen version "
-                    .to_string(),
-            )
-            .default(0)
-            .max_length(MAX_LENGTH_FOR_CACHE_LABELS.into())
-            .items(&selections[..])
-            .interact()
-            .unwrap();
+                where non TDB = Nextgen version ",
+            Some(MAX_LENGTH_FOR_CACHE_LABELS),
+        )
+        .unwrap();
         let selected_text = &selections[selection];
 
         LabelOptions::from(&selected_text[..])
@@ -380,12 +372,9 @@ impl Ask for Dialogs {
             .collect();
         selections.sort();
         selections.push(Back.to_label());
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select game to switch".to_string())
-            .default(0)
-            .items(&selections[..])
-            .interact()
-            .unwrap();
+
+        let selection = open_dialog::open_dialog(&selections, "Select game to switch", None)?;
+
         let selected_text = &selections[selection];
 
         match LabelOptions::from(&selected_text[..]) {
@@ -438,7 +427,7 @@ impl Ask for Dialogs {
         };
         Ok(Early)
     }
-    
+
     fn ask_for_runtime_decision_and_change_it(
         &mut self,
         config: &mut REvilConfig,
@@ -453,12 +442,7 @@ impl Ask for Dialogs {
         selections.sort();
         selections.push(Back.to_label());
 
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select game to run".to_string())
-            .default(0)
-            .items(&selections[..])
-            .interact()
-            .unwrap();
+        let selection = open_dialog::open_dialog(&selections, "Select game to run", None)?;
 
         let selected_text = &selections[selection];
 
@@ -492,6 +476,9 @@ impl Ask for Dialogs {
             );
             game_config.runtime = Some(runtime.as_opposite());
         }
+
+        // TODO below doesn't check if asset is tdb/non-tdb only get 1st asset position
+        //      it shouldn't be problem but in case added TODO
         if let Some(pos) = game_config
             .versions
             .as_ref()
@@ -730,11 +717,63 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ask_for_runtime_decision_and_change_it_test() {
+        let vec = ["RE2", "RE3", "RE8"].to_vec();
+        let (_, mut config, mut state, mut dialogs) = init_dialogs_mocks();
+        config.games.get_mut("RE8").unwrap().steamId = Some("1196590".to_string());
+
+        vec.iter().for_each(|short_name| {
+            let short_name = short_name.clone();
+            let ctx = open_dialog::open_dialog_context();
+            ctx.expect().returning(move |selections, _, _| {
+                let pos = selections
+                    .iter()
+                    .position(|label| label.contains(short_name))
+                    .unwrap();
+                Ok(pos)
+            });
+
+            let version_pos_and_game_short_name =
+                dialogs.ask_for_runtime_decision_and_change_it(&mut config, &mut state);
+
+            if short_name == "RE2" {
+                let (pos, game_short_name) = version_pos_and_game_short_name
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(pos, &1);
+                assert_eq!(game_short_name, short_name);
+            }
+            // should also return an error as version_set doesn't have any assets
+            if short_name == "RE3" {
+                let err = version_pos_and_game_short_name
+                    .as_ref()
+                    .expect_err("Should return error with short_name");
+                assert_eq!(
+                    err.current_context(),
+                    &DialogsErrors::NoCacheFile("RE3".to_string())
+                );
+            }
+            if short_name == "RE8" {
+                let err = version_pos_and_game_short_name
+                    .as_ref()
+                    .expect_err("Should return error with short_name");
+                assert_eq!(
+                    err.current_context(),
+                    &DialogsErrors::NoCacheFile("RE8".to_string())
+                );
+            }
+        })
+    }
+
+    #[test]
     fn should_get_correct_selections_for_runtime_switch() {
         let (_, config, _, _) = init_dialogs_mocks();
         let mut selections = get_selections_for_runtime_switch(&config);
         selections.sort();
         assert_eq!(selections.len(), 2);
+        // RE8 is missing steamId and RE7 has only location that's why only 2 records
         let expected = [
             ("Switch runtime to <OpenVR> for RE2".to_string(), "883710"),
             ("Switch runtime to <OpenVR> for RE3".to_string(), "952060"),
