@@ -143,12 +143,10 @@ fn perform_find_in_chunks(file: &File, text: &str, chunk_size: usize) -> io::Res
 
 #[cfg(test)]
 mod tests {
-    use env_logger::Env;
-
-    use crate::utils::binSearch::{find_subsequence};
+    use crate::utils::{binSearch::{find_subsequence}, init_logger::init_logger};
 
     fn init() {
-        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+        init_logger("debug");
     }
 
     // #[test]
