@@ -9,6 +9,10 @@
           {
             "path": "refresher.zip",
             "label": "Refresher.zip"
+          },
+          {
+            "path": "coverage.zip",
+            "label": "Coverage data"
           }
         ]
       }

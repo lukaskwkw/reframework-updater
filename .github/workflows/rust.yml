@@ -21,8 +21,8 @@ jobs:
           override: true
           components: llvm-tools-preview
           target: x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@c5ed9ba6b7e1bb8aff90d43acd2f0af4990fa57c
-      
+      - uses: Swatinem/rust-cache@v2
+
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest
       - name: Install cargo-llvm-cov
@@ -36,29 +36,22 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: llvm-cov
-          args: nextest --target x86_64-pc-windows-msvc
-      - name: Zip files
+          args: nextest --html --target x86_64-pc-windows-msvc
+      - name: Zip executable
         uses: vimtor/action-zip@v1
         with:
           files: target\x86_64-pc-windows-msvc\release\reframework-updater.exe
           dest: refresher.zip
+      - name: Zip coverage data
+        uses: vimtor/action-zip@v1
+        with:
+          files: target\llvm-cov\html
+          dest: coverage.zip
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: 'lts/*'
+          node-version: "lts/*"
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release        
-      # - name: Semantic Release
-      #   uses: cycjimmy/semantic-release-action@v3
-      #   with:
-      #       semantic_version: 17.1.1
-      #       extra_plugins: |
-      #           @semantic-release/commit-analyzer
-      #           @semantic-release/release-notes-generator
-      #           @semantic-release/github
-      #           @semantic-release/git
-
-      #   env:
-      #       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: npx semantic-release
