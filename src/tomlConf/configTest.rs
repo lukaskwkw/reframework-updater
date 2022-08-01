@@ -3,11 +3,8 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::tomlConf::{
-        configStruct::{GameConfig, Main, REvilConfig, Runtime},
-        utils::{deserialize, serialize},
-    };
-
+    use crate::tomlConf::{configStruct::{GameConfig, Main, Runtime, REvilConfig}, utils::{deserialize, serialize}};
+    
     #[test]
     fn check_correctness_of_serialization() {
         let content = r#"
@@ -34,7 +31,8 @@ mod tests {
     "#;
         match deserialize(content) {
             Ok((main, games)) => {
-                let main_test = Main {
+                let main_test = Main
+                {
                     steamExePath: Some(r"C:\Program Files (x86)\Steam\steam.exe".to_owned()),
                     autoupdate: Some(true),
                     sources: Some(vec!["normal".to_owned(), "nightly".to_owned()]),
@@ -59,9 +57,7 @@ mod tests {
                     nextgen: None,
                     runArgs: None,
                     runtime: None,
-                    versions: Some(vec![
-                        ["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()
-                    ]),
+                    versions: Some(vec![["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()]),
                     steamId: None,
                 };
                 games_test.insert("RE7".to_owned(), game);
@@ -72,11 +68,7 @@ mod tests {
                     nextgen: None,
                     runArgs: None,
                     runtime: Some(Runtime::OpenVR),
-                    versions: Some(vec![[
-                        "v1.71-abd3145".to_owned(),
-                        "RE12_TDB77.zip".to_owned(),
-                    ]
-                    .to_vec()]),
+                    versions: Some(vec![["v1.71-abd3145".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
                     steamId: None,
                 };
                 games_test.insert("RE12".to_owned(), game);
@@ -116,9 +108,7 @@ mod tests {
             nextgen: None,
             runArgs: None,
             runtime: None,
-            versions: Some(vec![
-                ["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()
-            ]),
+            versions: Some(vec![["v1.71-abd3145".to_owned(), "RE7.zip".to_owned()].to_vec()]),
         };
         games_test.insert("RE7".to_owned(), game);
 
@@ -129,11 +119,7 @@ mod tests {
             nextgen: None,
             runArgs: None,
             runtime: Some(Runtime::OpenVR),
-            versions: Some(vec![[
-                "v1.71-abd3145".to_owned(),
-                "RE12_TDB77.zip".to_owned(),
-            ]
-            .to_vec()]),
+            versions: Some(vec![["v1.71-abd3145".to_owned(), "RE12_TDB77.zip".to_owned()].to_vec()]),
         };
         games_test.insert("RE12".to_owned(), game);
 

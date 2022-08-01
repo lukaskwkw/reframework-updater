@@ -39,8 +39,8 @@ use crate::unzip::unzip::mock_unzip as unzip;
 use crate::unzip::unzip::unzip;
 
 use error_stack::{IntoReport, Report, Result, ResultExt};
+use log::{debug, error, info, log, trace, warn, Level};
 use self_update::update::ReleaseAsset;
-use simple_log::log::{debug, error, info, log, trace, warn, Level};
 use std::time::Duration;
 
 use indicatif::ProgressBar;

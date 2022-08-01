@@ -3,8 +3,9 @@ use mockall::automock;
 
 use std::{collections::HashMap, error::Error};
 
-
-use error_stack::{Report, Result, ResultExt};
+use dialoguer::theme::ColorfulTheme;
+use error_stack::{IntoReport, Report, Result, ResultExt};
+use log::{debug, info, warn};
 use self_update::update::ReleaseAsset;
 
 #[cfg(test)]
@@ -25,7 +26,6 @@ use crate::{
     },
     GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER,
 };
-use simple_log::log::{debug, info, warn};
 
 #[derive(PartialEq, Debug, Default)]
 pub enum DialogsErrors {
@@ -150,7 +150,7 @@ impl Ask for Dialogs {
             return Ok(());
         }
 
-        if let Some((asset, _, _game_id)) = game_decisions.get(&selections[selection]) {
+        if let Some((asset, _, game_id)) = game_decisions.get(&selections[selection]) {
             debug!("Adding single asset {}", asset.name);
             state.selected_assets.push(asset.clone());
         };
@@ -360,14 +360,14 @@ impl Ask for Dialogs {
                       Game {}", short_name);
                     return None;
                 }
-                
-                game.nextgen.map(|nextgen| {
+                let label = game.nextgen.map(|nextgen| {
                     if nextgen {
                         SwitchToStandard(short_name.to_string()).to_label()
                     } else {
                         SwitchToNextgen(short_name.to_string()).to_label()
                     }
-                })
+                });
+                label
             })
             .collect();
         selections.sort();

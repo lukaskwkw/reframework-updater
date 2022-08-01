@@ -1,8 +1,14 @@
-use crate::reframework_github::release::ReleaseREFR;
-use crate::DynResult;
+use std::io::{Cursor};
+use std::{
+    error::Error,
+};
+use log::{error};
 use reqwest::header;
-use self_update::update::Release;
-use simple_log::log::error;
+use self_update::{
+    update::{Release}
+};
+use crate::DynResult;
+use crate::reframework_github::release::ReleaseREFR;
 
 pub fn fetch_release_api(github_api_url: &str) -> DynResult<Release> {
     let mut headers = header::HeaderMap::new();

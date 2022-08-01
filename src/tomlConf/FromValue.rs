@@ -1,5 +1,5 @@
-use serde::de::DeserializeOwned;
-use toml::Value;
+use serde::{de::DeserializeOwned};
+use toml::{Value};
 
 pub trait FromValue {
     fn from_value<T>(value: Value) -> Result<T, toml::de::Error>

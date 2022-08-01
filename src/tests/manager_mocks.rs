@@ -27,7 +27,7 @@ pub(crate) fn init_manager_mocks() -> (
     let mut local_provider_mock = Box::new(mock_local_files);
     prepare_steam_mock(&mut steam_menago);
     mock_local_provider_w_defaults(&mut local_provider_mock);
-
+    
     let dialogs = get_dialogs_provider_mock();
     // ctx variable has to be present even if it's not used - don't know why
     let config_provider_mock = get_config_provider_mock();
@@ -42,3 +42,4 @@ pub(crate) fn init_manager_mocks() -> (
         mock_reft_constr,
     )
 }
+

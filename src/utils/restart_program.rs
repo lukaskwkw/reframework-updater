@@ -1,4 +1,4 @@
-use std::{io, process};
+use std::{process, io};
 
 use std::process::Command;
 

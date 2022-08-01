@@ -15,7 +15,7 @@ pub fn convert_args_to_config() {
 pub enum RunAfter {
     #[default]
     yes,
-    no,
+    no
 }
 
 impl RunAfter {

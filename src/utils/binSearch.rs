@@ -1,5 +1,5 @@
-use rand::{self, thread_rng, Rng};
-use simple_log::log::debug;
+use log::debug;
+use rand::{self, Rng, thread_rng};
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom},
@@ -106,7 +106,8 @@ pub fn find_string_in_binary_file(file: impl AsRef<Path>, text: &str) -> io::Res
         let new_buff_size = BUFFER_SIZE + random_plus as usize;
         debug!(
             "\nNot found in chunks in {:?} Searching one more time with new buffer size {}. \n",
-            file, new_buff_size
+            file,
+            new_buff_size
         );
         file.rewind()?;
 
@@ -142,10 +143,12 @@ fn perform_find_in_chunks(file: &File, text: &str, chunk_size: usize) -> io::Res
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{binSearch::find_subsequence, init_logger::init_logger};
+    use env_logger::Env;
+
+    use crate::utils::binSearch::{find_subsequence};
 
     fn init() {
-        init_logger("debug");
+        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
     }
 
     // #[test]

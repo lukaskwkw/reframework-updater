@@ -9,12 +9,12 @@ use std::{
     fs,
 };
 
+use log::{info, trace};
 use reqwest::header;
 use self_update::{
     update::{Release, ReleaseAsset},
     Download,
 };
-use simple_log::log::{info, trace};
 
 use crate::{
     utils::{fetch::fetch_release_api, get_local_path_to_cache::get_local_path_to_cache_folder},
