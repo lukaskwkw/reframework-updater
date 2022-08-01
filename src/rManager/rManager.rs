@@ -1,5 +1,3 @@
-use std::{cmp::Ordering, collections::HashMap, env, ffi::OsStr, fs};
-
 use crate::{
     args::RunAfter,
     dialogs::{
@@ -23,7 +21,7 @@ use crate::{
         get_local_path_to_cache::get_local_path_to_cache_folder,
         init_logger::init_logger,
         is_asset_tdb::is_asset_tdb,
-        local_version::LocalFiles,
+        local_version::{LocalFiles, LocalGameConfig},
         progress_style,
         restart_program::restart_program,
         version_parser::{isRepoVersionNewer, HASH_DELIMITER},
@@ -31,7 +29,9 @@ use crate::{
     DynResult, ARGS, GAMES, MAX_ZIP_FILES_PER_GAME_CACHE, NIGHTLY_RELEASE, REPO_OWNER,
     STANDARD_TYPE_QUALIFIER,
 };
+use rayon::prelude::*;
 use std::path::Path;
+use std::{cmp::Ordering, collections::HashMap, env, ffi::OsStr, fs};
 
 #[cfg(test)]
 use crate::unzip::unzip::mock_unzip as unzip;
@@ -53,7 +53,7 @@ pub static UPDATE_IDENTIFIER: &str = "update_me";
 impl REvilManager {
     pub fn new(
         config_provider: Box<dyn ConfigProvider>,
-        local_provider: Box<dyn LocalFiles>,
+        local_provider: Box<dyn LocalFiles + Sync + Send>,
         steam_menago: Box<dyn SteamThings>,
         dialogs: Box<dyn Ask>,
         github_constr: fn(&str, &str) -> Box<dyn ManageGithub>,
@@ -179,20 +179,33 @@ impl REvilThings for REvilManager {
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(80).as_secs());
         pb.set_style(progress_style::getProgressStyle());
-        for (short_name, config) in self.config.games.iter_mut() {
-            let game_location = config.location.as_ref().unwrap();
-            pb.set_message(format!("Loading config from {} ...", game_location));
-            pb.tick();
-            let local_config = self
-                .local_provider
-                .get_local_report_for_game(game_location, short_name);
-            if local_config.runtime.is_some() {
-                config.runtime = local_config.runtime;
+        // let games_vec: Vec<_> = self.config.games.iter().collect();
+        let local_settings: Vec<(String, LocalGameConfig)> = self
+            .config
+            .games
+            .par_iter()
+            .filter_map(|(short_name, config)| {
+                config.location.as_ref().map(|location| {
+                    // pb.set_message(format!("Loading config from {} ...", location));
+                    // pb.tick();
+                    let local_config = self
+                        .local_provider
+                        .get_local_report_for_game(&location, short_name);
+                    (short_name.to_string(), local_config)
+                })
+            })
+            .collect();
+        // pb.tick();
+        for (short_name, local_config) in local_settings.iter() {
+            let config = self.config.games.get_mut(short_name).unwrap();
+            if let Some(runtime) = local_config.runtime.as_ref() {
+                config.runtime = Some(runtime.clone());
             }
             // we want check config.versions because maybe found new steam game and we don't want to
             // replace versions information for other games
-            if local_config.version.is_some() && config.versions.is_none() {
-                let local_ver = local_config.version.unwrap();
+            if let (Some(version), None) = (local_config.version.as_ref(), config.versions.as_ref())
+            {
+                let local_ver = version.clone();
                 config.versions = Some([[local_ver.to_string()].to_vec()].to_vec());
                 config.version_in_use = Some(local_ver);
             }

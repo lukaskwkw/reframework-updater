@@ -1395,6 +1395,7 @@ dependencies = [
  "mockall",
  "mslnk",
  "rand",
+ "rayon",
  "reqwest",
  "self_update",
  "serde",

@@ -28,7 +28,7 @@ pub struct REvilManager {
     pub config: REvilConfig,
     pub config_provider: Box<dyn ConfigProvider>,
     pub steam_menago: Box<dyn SteamThings>,
-    pub local_provider: Box<dyn LocalFiles>,
+    pub local_provider: Box<dyn LocalFiles + Sync + Send>,
     pub dialogs: Box<dyn Ask>,
     pub github_release_manager: Option<Box<dyn ManageGithub>>,
     pub refr_ctor: fn(&str, &str) -> Box<dyn ManageGithub>,
