@@ -6,7 +6,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     fs,
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 
 use crate::{

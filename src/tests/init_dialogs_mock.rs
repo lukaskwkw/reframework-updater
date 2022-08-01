@@ -1,6 +1,8 @@
 use crate::tomlConf::config::ConfigProvider;
 
-use crate::tests::config_provider_mock::mock_conf_provider::{get_config_provider_mock, load_from_file_default_return_mock};
+use crate::tests::config_provider_mock::mock_conf_provider::{
+    get_config_provider_mock, load_from_file_default_return_mock,
+};
 
 use crate::tests::refr_github_mock::prepare_refr_github_mock_and_get_constr;
 use crate::utils::init_logger::init_logger;
@@ -34,8 +36,8 @@ pub(crate) fn init_dialogs_mocks() -> (
     let assets_report = refr_github.getAssetsReport().clone();
     let mut config_provider_mock = get_config_provider_mock();
     config_provider_mock
-                .expect_load_from_file()
-                .returning(load_from_file_default_return_mock());
+        .expect_load_from_file()
+        .returning(load_from_file_default_return_mock());
     let config = config_provider_mock.load_from_file().unwrap();
     let state: REvilManagerState = REvilManagerState::default();
     let dialogs = Box::new(Dialogs);

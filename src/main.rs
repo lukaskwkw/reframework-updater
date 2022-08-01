@@ -20,7 +20,6 @@ pub mod reframework_github {
     pub mod release;
 }
 mod utils {
-    pub mod open_dialog;
     pub mod binSearch;
     pub mod fetch;
     pub mod find_game_conf_by_steam_id;
@@ -28,6 +27,7 @@ mod utils {
     pub mod init_logger;
     pub mod is_asset_tdb;
     pub mod local_version;
+    pub mod open_dialog;
     pub mod progress_style;
     pub mod restart_program;
     pub mod version_parser;
@@ -124,5 +124,5 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 // TODO maybe instead terminating catchable on error show that error and then ask for press key to exit?
 // TODO when using rescan option, local config can contain different version so it is added to beginning of array versions but then when switching different version from cache
 //      that particular mod from local config is gone now -> to fix that we should implement zipping local version after any detection or prevent to loading cache for that game (1st preferable)
-//      this bug should not occurs often.. 
-// TODO be aware that when implementing zipping functionality runtime file can be missing and it can complicate later runtime switching! 
+//      this bug should not occurs often..
+// TODO be aware that when implementing zipping functionality runtime file can be missing and it can complicate later runtime switching!

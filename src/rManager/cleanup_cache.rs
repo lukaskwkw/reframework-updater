@@ -11,10 +11,7 @@ use log::debug;
 
 use crate::rManager::rManager_header::ResultManagerErr;
 
-pub fn cleanup_cache(
-    last_ver: &Vec<String>,
-    game_short_name: &str,
-) -> ResultManagerErr<()> {
+pub fn cleanup_cache(last_ver: &Vec<String>, game_short_name: &str) -> ResultManagerErr<()> {
     if last_ver.len() < 2 {
         debug!(
             "A Game {} Cache warn: {:?}",
@@ -24,9 +21,8 @@ pub fn cleanup_cache(
         return Ok(());
     }
     let last_ver_nb = &last_ver[0];
-    let cache_dir = get_local_path_to_cache_folder(None, Some(last_ver_nb)).map_err(|_| 
-        Report::new(REvilManagerError::ReleaseManagerIsNotInitialized,
-    ))?;
+    let cache_dir = get_local_path_to_cache_folder(None, Some(last_ver_nb))
+        .map_err(|_| Report::new(REvilManagerError::ReleaseManagerIsNotInitialized))?;
     if cache_dir.exists() {
         let file_to_remove = cache_dir.join(&last_ver[1]);
         if Path::new(&file_to_remove).exists() {

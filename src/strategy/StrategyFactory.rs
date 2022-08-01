@@ -16,11 +16,24 @@ impl StrategyFactory {
         let run = get_args();
 
         manager.state.selected_option = Some(LabelOptions::GoTop);
-        if run != "none" {
-            Box::new(CheckUpdateAndRunTheGame::run)
-        } else {
+        if run == "none" {
             Box::new(DefaultRoute::run)
+        } else {
+            Box::new(CheckUpdateAndRunTheGame::run)
         }
+    }
+}
+
+struct DefaultRoute;
+impl Strategy for DefaultRoute {
+    fn run(manager: &mut REvilManager) {
+        EarlyLoad::run(manager);
+        manager.or_log_err(|this| this.generate_ms_links(), Level::Warn);
+        manager
+            .check_for_REFramework_update()
+            .and_then(|this| this.decision_loop())
+            .unwrap();
+        LaunchAndSave::run(manager);
     }
 }
 
@@ -34,7 +47,7 @@ impl Strategy for CheckUpdateAndRunTheGame {
             .and_then(|this| this.download_REFramework_update())
             .and_then(|this| this.unzip_updates().after_unzip_work(None))
             .and_then(|this| this.save_config())
-            // below is only necessary when restarting program with switch option
+            // below is only necessary when restarting program with switch/update-me option
             .and_then(|this| this.decision_loop())
             .unwrap();
         LaunchAndSave::run(manager);
@@ -49,17 +62,6 @@ impl Strategy for LaunchAndSave {
             .and_then(|this| this.save_config())
             .map(|_| ())
             .unwrap_or_else(|err| error!("{:?}", err));
-    }
-}
-
-struct CheckThenLoop;
-impl Strategy for CheckThenLoop {
-    fn run(manager: &mut REvilManager) {
-        manager
-            .check_for_REFramework_update()
-            .and_then(|this| this.decision_loop())
-            .unwrap();
-        LaunchAndSave::run(manager);
     }
 }
 
@@ -78,22 +80,16 @@ impl Strategy for EarlyLoad {
             Err(err) => manager
                 .state
                 .config_loading_error_ocurred
-                .then(|| panic!("Error loading config file and error steam detection: {err}. Make sure steam is installed correctly"))
+                .then(|| {
+                     error!("Error loading config file and error steam detection: {err}. Make sure steam is installed correctly");
+                     panic!();
+                })
                 .unwrap_or(warn!("{err}")),
         };
         // only check local files again when a config failed to be loaded or a steam found the new game
         if manager.state.config_loading_error_ocurred || manager.state.new_steam_game_found {
             manager.get_local_settings_per_game_and_amend_current_ones();
         };
-    }
-}
-
-struct DefaultRoute;
-impl Strategy for DefaultRoute {
-    fn run(manager: &mut REvilManager) {
-        EarlyLoad::run(manager);
-        manager.or_log_err(|this| this.generate_ms_links(), Level::Warn);
-        CheckThenLoop::run(manager);
     }
 }
 

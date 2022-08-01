@@ -20,13 +20,10 @@ pub fn serialize(config: &REvilConfig) -> ConfigResult<String> {
             format!("Error during serialization of main {:?}", &config.main)
         })?;
 
-    let mut games_vec: Vec<_> = config
-        .games
-        .iter()
-        .collect();
-        games_vec.sort_by_key(|tuple| tuple.0.to_string());
-        
-        let config_str = games_vec
+    let mut games_vec: Vec<_> = config.games.iter().collect();
+    games_vec.sort_by_key(|tuple| tuple.0.to_string());
+
+    let config_str = games_vec
         .iter()
         .map(|(key, value)| {
             let config_str = toml::to_string_pretty(&value)

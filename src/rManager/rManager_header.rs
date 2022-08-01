@@ -10,7 +10,7 @@ use self_update::update::ReleaseAsset;
 use crate::{
     args::RunAfter,
     dialogs::{dialogs::Ask, dialogs_label::LabelOptions},
-    refr_github::{ManageGithub},
+    refr_github::ManageGithub,
     steam::SteamThings,
     tomlConf::{
         config::ConfigProvider,
@@ -151,9 +151,15 @@ impl fmt::Display for REvilManagerError {
             REvilManagerError::ModRuntimeIsNone(game) => write!(f, "ModRuntimeIsNone for {}", game),
             REvilManagerError::ErrorRestartingProgram => write!(f, "ErrorRestartingProgram"),
             REvilManagerError::DownloadAssetError(asset_name) => {
-                write!(f, "During downloading {} asset there was an error", asset_name)
+                write!(
+                    f,
+                    "During downloading {} asset there was an error",
+                    asset_name
+                )
             }
-            REvilManagerError::ModIsNotInstalled(short_name) => write!(f, "Mod is not installed for {}", short_name),
+            REvilManagerError::ModIsNotInstalled(short_name) => {
+                write!(f, "Mod is not installed for {}", short_name)
+            }
             REvilManagerError::NoGamesToUpdate => write!(f, "No games to update"),
         }
     }

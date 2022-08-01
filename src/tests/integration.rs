@@ -357,4 +357,4 @@ pub mod tests {
         })
     }
 }
-// TODO maybe test where there is a new steam discovery i.e. move out game_path_vec from steam_mock to pub fn and then for new one concatenate with desired vec 
+// TODO maybe test where there is a new steam discovery i.e. move out game_path_vec from steam_mock to pub fn and then for new one concatenate with desired vec
