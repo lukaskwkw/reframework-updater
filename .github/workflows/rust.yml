@@ -3,8 +3,6 @@ name: Rust
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -39,3 +37,28 @@ jobs:
         with:
           command: llvm-cov
           args: nextest --target x86_64-pc-windows-msvc
+      - name: Zip files
+        uses: vimtor/action-zip@v1
+        with:
+          files: target\x86_64-pc-windows-msvc\release\reframework-updater.exe
+          dest: refresher.zip
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 'lts/*'
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release        
+      # - name: Semantic Release
+      #   uses: cycjimmy/semantic-release-action@v3
+      #   with:
+      #       semantic_version: 17.1.1
+      #       extra_plugins: |
+      #           @semantic-release/commit-analyzer
+      #           @semantic-release/release-notes-generator
+      #           @semantic-release/github
+      #           @semantic-release/git
+
+      #   env:
+      #       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
