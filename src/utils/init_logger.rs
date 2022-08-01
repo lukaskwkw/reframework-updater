@@ -3,16 +3,17 @@ use simplelog::*;
 use std::fs::File;
 
 pub fn init_logger(error_level: &str) {
+    let config = ConfigBuilder::new()
+        .set_level_color(Level::Info, Some(Color::Rgb(102, 212, 0)))
+        .build();
+
     let logger = CombinedLogger::init(vec![
-        // #[cfg(feature = "termcolor")]
         TermLogger::new(
             error_level.parse::<LevelFilter>().unwrap(),
-            Config::default(),
+            config,
             TerminalMode::Mixed,
             ColorChoice::Auto,
         ),
-        // #[cfg(not(feature = "termcolor"))]
-        SimpleLogger::new(LevelFilter::Warn, Config::default()),
         WriteLogger::new(
             error_level.parse::<LevelFilter>().unwrap(),
             Config::default(),
