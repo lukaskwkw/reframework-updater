@@ -14,7 +14,7 @@ use crate::{
     tomlConf::configStruct::Runtime,
     DynResult, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER,
 };
-use error_stack::{IntoReport, Report, Result, ResultExt};
+use error_stack::{IntoReport, Report, ResultExt};
 use log::{debug, warn};
 
 use super::binSearch::find_string_in_binary_file;

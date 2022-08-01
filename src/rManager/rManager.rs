@@ -333,8 +333,8 @@ impl REvilThings for REvilManager {
                 report,
             )
             .map_err(|err| match err.current_context() {
-                DialogsErrors::NoGamesToUpdate => return REvilManagerError::NoGamesToUpdate,
-                _ => return REvilManagerError::Other,
+                DialogsErrors::NoGamesToUpdate => REvilManagerError::NoGamesToUpdate,
+                _ => REvilManagerError::Other,
             })?;
         Ok(self)
     }

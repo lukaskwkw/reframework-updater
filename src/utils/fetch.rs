@@ -1,7 +1,3 @@
-use std::io::{Cursor};
-use std::{
-    error::Error,
-};
 use log::{error};
 use reqwest::header;
 use self_update::{

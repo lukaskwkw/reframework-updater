@@ -3,8 +3,8 @@ use mockall::automock;
 
 use std::{collections::HashMap, error::Error};
 
-use dialoguer::theme::ColorfulTheme;
-use error_stack::{IntoReport, Report, Result, ResultExt};
+
+use error_stack::{Report, Result, ResultExt};
 use log::{debug, info, warn};
 use self_update::update::ReleaseAsset;
 
@@ -360,14 +360,14 @@ impl Ask for Dialogs {
                       Game {}", short_name);
                     return None;
                 }
-                let label = game.nextgen.map(|nextgen| {
+                
+                game.nextgen.map(|nextgen| {
                     if nextgen {
                         SwitchToStandard(short_name.to_string()).to_label()
                     } else {
                         SwitchToNextgen(short_name.to_string()).to_label()
                     }
-                });
-                label
+                })
             })
             .collect();
         selections.sort();

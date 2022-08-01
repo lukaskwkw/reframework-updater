@@ -11,10 +11,6 @@ use log::debug;
 
 use crate::rManager::rManager_header::ResultManagerErr;
 
-use crate::refr_github::REFRGithub;
-
-use crate::refr_github::ManageGithub;
-
 pub fn cleanup_cache(
     last_ver: &Vec<String>,
     game_short_name: &str,
