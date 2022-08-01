@@ -1,16 +1,20 @@
-use env_logger::Env;
-use log::debug;
+use simple_log::LogConfigBuilder;
 
 pub fn init_logger(error_level: &str) {
-    let env = Env::default().filter_or(
-        "REFR_LEVEL",
-        error_level
-    );
+    let config = LogConfigBuilder::builder()
+        .path("refresher.log")
+        .size(1 * 100)
+        .roll_count(10)
+        .time_format("%Y-%m-%d %H:%M:%S") //E.g:%H:%M:%S.%f
+        .level(error_level)
+        .output_file()
+        .output_console()
+        .build();
 
-    match env_logger::Builder::from_env(env).try_init() {
+    match simple_log::new(config) {
         Ok(it) => it,
         Err(err) => {
-            debug!("Logger already initialized {}", err);            
+            eprintln!("Logger error {:?}", err);
         }
     };
 }

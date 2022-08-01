@@ -1,5 +1,5 @@
-use log::trace;
 use self_update::update::Release;
+use simple_log::log::trace;
 
 use crate::reframework_github::refr_github::REFRGithubError;
 use crate::DynResult;

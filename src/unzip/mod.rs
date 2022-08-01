@@ -3,15 +3,13 @@ pub mod unzip {
     use error_stack::Report;
     use error_stack::Result;
     use error_stack::ResultExt;
-    use log::debug;
-    use log::info;
-    use log::trace;
     use std::ffi::OsStr;
     use std::fs;
     use std::io;
     use std::path::Path;
     use std::path::PathBuf;
 
+    use simple_log::log::{debug, info, trace};
     pub fn unzip<F>(
         file_to_unzip: impl AsRef<Path>,
         destination: impl AsRef<Path>,

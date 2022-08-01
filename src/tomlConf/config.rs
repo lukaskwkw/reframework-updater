@@ -1,5 +1,5 @@
 #[cfg(test)]
-use mockall::{automock};
+use mockall::automock;
 
 use error_stack::{IntoReport, Result, ResultExt};
 use std::fs::File;

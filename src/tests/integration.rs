@@ -133,6 +133,8 @@ pub mod tests {
                     .once()
                     .returning(|_| Ok(()));
             } else {
+                // TODO should never run a game because the mod for that game is not installed yet! ( below ask_for_decision_and_populate_selected_assets_return_mock won't populate RE3)
+                // this should be changed to be allowed to run a game via this tool that doesn't have mod installed I think
                 steam_menago
                     .expect_run_game_via_steam_manager()
                     .never()
@@ -357,4 +359,4 @@ pub mod tests {
         })
     }
 }
-// TODO maybe test where there is a new steam discovery i.e. move out game_path_vec from steam_mock to pub fn and then for new one concatenate with desired vec 
+// TODO maybe test where there is a new steam discovery i.e. move out game_path_vec from steam_mock to pub fn and then for new one concatenate with desired vec

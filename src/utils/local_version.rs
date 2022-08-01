@@ -6,7 +6,7 @@ use std::{
     error::Error,
     fmt::{self, Display, Formatter},
     fs,
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 
 use crate::{
@@ -14,10 +14,10 @@ use crate::{
     tomlConf::configStruct::Runtime,
     DynResult, GAMES_NEXTGEN_SUPPORT, STANDARD_TYPE_QUALIFIER,
 };
-use error_stack::{IntoReport, Report, Result, ResultExt};
-use log::{debug, warn};
+use error_stack::{IntoReport, Report, ResultExt};
 
 use super::binSearch::find_string_in_binary_file;
+use simple_log::log::{debug, warn};
 
 const VERSION_FILENAME: &str = "reframework_revision.txt";
 

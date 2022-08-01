@@ -3,8 +3,8 @@ use crate::{
     rManager::rManager_header::REvilThings, ARGS,
 };
 use error_stack::ResultExt;
-use log::{error, info, warn, Level};
 
+use simple_log::log::{error, info, warn, Level};
 pub struct StrategyFactory;
 
 trait Strategy {

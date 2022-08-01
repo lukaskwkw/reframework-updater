@@ -18,8 +18,10 @@ pub fn find_game_conf_by_steam_id<'a>(
         .find(|(_, conf)| {
             conf.steamId.as_ref().is_some() && conf.steamId.as_ref().unwrap() == steam_id
         })
-        .ok_or_else(|| Report::new(REvilManagerError::GameNotFoundForGivenSteamId(
-            steam_id.to_string(),
-        )))?;
+        .ok_or_else(|| {
+            Report::new(REvilManagerError::GameNotFoundForGivenSteamId(
+                steam_id.to_string(),
+            ))
+        })?;
     Ok((game_short_name, game_config))
 }

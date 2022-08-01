@@ -3,3 +3,4 @@ tmp
 config.toml
 REFR_links
 refr_cache
+*log
