@@ -1,7 +1,8 @@
 [package]
-name = "reframework-updater"
-version = "0.1.0"
+name = "REFresher"
+version = "1.1.2"
 edition = "2021"
+authors = ["Łukasz Kwiecień"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

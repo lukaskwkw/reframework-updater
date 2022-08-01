@@ -40,8 +40,8 @@ jobs:
       - name: Zip executable
         uses: vimtor/action-zip@v1
         with:
-          files: target\x86_64-pc-windows-msvc\release\reframework-updater.exe
-          dest: refresher.zip
+          files: target\x86_64-pc-windows-msvc\release\REFresher.exe
+          dest: REFresher.zip
       - name: Zip coverage data
         uses: vimtor/action-zip@v1
         with:

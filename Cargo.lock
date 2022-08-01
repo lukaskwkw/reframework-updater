@@ -3,6 +3,31 @@
 version = 3
 
 [[package]]
+name = "REFresher"
+version = "1.1.2"
+dependencies = [
+ "clap",
+ "dialoguer",
+ "error-stack",
+ "game-scanner",
+ "indicatif",
+ "lazy_static",
+ "log",
+ "mockall",
+ "mslnk",
+ "rand",
+ "reqwest",
+ "self_update",
+ "serde",
+ "serde_json",
+ "simplelog",
+ "tokio",
+ "toml",
+ "winres",
+ "zip",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1379,31 +1404,6 @@ dependencies = [
  "getrandom",
  "redox_syscall",
  "thiserror",
-]
-
-[[package]]
-name = "reframework-updater"
-version = "0.1.0"
-dependencies = [
- "clap",
- "dialoguer",
- "error-stack",
- "game-scanner",
- "indicatif",
- "lazy_static",
- "log",
- "mockall",
- "mslnk",
- "rand",
- "reqwest",
- "self_update",
- "serde",
- "serde_json",
- "simplelog",
- "tokio",
- "toml",
- "winres",
- "zip",
 ]
 
 [[package]]
