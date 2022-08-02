@@ -17,29 +17,47 @@ to fetch update for every new [nightly](https://github.com/praydog/REFramework-n
 - Switch between OpenXR/OpenVR mod versions for all games.
 - At first run app will Steam detect all supported games and scan current REFramework mod settings per game providing mod is installed for that game. After that app will always update the correct mod type and unpack correct runtime. You can also execute the scan by selecting `Rescan local settings...` option in case where you changed mod manually (i.e. unpacked different version)
 
-## Run
+## How to run app
+
+Go to [Releases](https://github.com/lukaskwkw/reframework-updater/releases) page and download latest version. Alternatively you can build app by yourself from source see [For Developers/Contributors](#for-developerscontributors)
+
 App is a single executable file but at first run it generate following:
-* **refr_cache** -> folder for caching downloaded mods
-* **REFR_links** -> folder for ms-links
-* **config.toml** -> file for app config (You can manually change [main] table section of this file. For each game setting 
-    please do it from app)
-* **refresher.log** -> file that contains last log of app
+
+- **refr_cache** -> folder for caching downloaded mods
+- **REFR_links** -> folder for ms-links
+- **config.toml** -> file for app config (You can manually change [main] table section of this file. For each game setting
+  please do it from app)
+- **refresher.log** -> file that contains last log of app
 
 Because of above you might want to put this app to separate folder or unpack it to folder before run.
+
+**You have to be logged in to your steam account for app to run particular game after update** Otherwise Steam will will ask for log in and only after that game will launch. Like it would normally when executing any steam game from shortcut.
 ### 1. First Launch
+
 ![Fresh app launch](fresh_run.gif "Fresh app launch")
+
 ### 2. Launch via ms-link
+
 ![Launch via ms-link](ms-link-run.gif "Launch via ms-link")
+
 ### Informational console warns:
-At fresh run the app throws a warn message 
+
+At fresh run the app throws a warn message
+
 ```sh
 [WARN] Error loading config file. # This is normal at first run.
 ```
-Also if you don't have cached mod for particular game yet it throws 
+
+Also if you don't have cached mod for particular game yet it throws
+
 ```sh
-[WARN] Mod version has no cache file 
+[WARN] Mod version has no cache file
 ```
+
 before launching a game. This also is normal.
+
+## For Developers/Contributors
+
 ## Build
 
 requirements - https://www.rust-lang.org/tools/install
@@ -103,4 +121,4 @@ cargo llvm-cov nextest --html --target x86_64-pc-windows-msvc # html report -> o
 cross nextest run --target x86_64-pc-windows-gnu
 ```
 
-You can [buymeacoffee](https://www.buymeacoffee.com/luk92k) if you like 
+You can [buymeacoffee](https://www.buymeacoffee.com/luk92k) if you like
