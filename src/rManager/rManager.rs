@@ -1260,12 +1260,12 @@ fn remove_second_runtime_file(game_config: &GameConfig) -> ResultManagerErr<()> 
             .change_context(REvilManagerError::RemoveFileFailed(
                 open_runtime_path.display().to_string(),
             ))?;
-        debug!(
+        info!(
             "Second runtime file removed {}",
             open_runtime_path.display()
         );
     } else {
-        debug!(
+        info!(
             "Second runtime file doesn't exist {}",
             open_runtime_path.display()
         );

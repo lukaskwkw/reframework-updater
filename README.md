@@ -2,7 +2,7 @@
 
 # REFresher
 
-![alt text](zombie.svg "Title")
+![alt text](zombie.svg "Zombie")
 
 ### REFramework updater CLI app
 
@@ -26,6 +26,10 @@ App is a single executable file but at first run it generate following:
 * **refresher.log** -> file that contains last log of app
 
 Because of above you might want to put this app to separate folder or unpack it to folder before run.
+### 1. First Launch
+![Fresh app launch](fresh_run.gif "Fresh app launch")
+### 2. Launch via ms-link
+![Launch via ms-link](ms-link-run.gif "Launch via ms-link")
 ### Informational console warns:
 At fresh run the app throws a warn message 
 ```sh
