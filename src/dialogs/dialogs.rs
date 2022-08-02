@@ -105,7 +105,7 @@ impl Ask for Dialogs {
         )
         .is_none()
         {
-            info!("Not found any games to update");
+            info!("Not found any new mod to update");
             return Err(Report::new(DialogsErrors::NoGamesToUpdate));
         }
 
@@ -226,7 +226,7 @@ impl Ask for Dialogs {
         selections.push(Exit.to_label());
 
         let selection =
-            open_dialog::open_dialog(&selections, "Select game to run or other options", None)?;
+            open_dialog::open_dialog(&selections, "Select a game to run or other option", None)?;
 
         let selected_text = &selections[selection];
 

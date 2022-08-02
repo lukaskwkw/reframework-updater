@@ -75,7 +75,7 @@ pub struct Main {
     // TODO maybe implement following -> pub deliberately_ask_for_update_check: Option<bool>,
     pub sources: Option<Vec<String>>,
     pub repo_owner: Option<String>,
-    pub chosen_source: Option<String>,
+    pub repo_name: Option<String>,
     pub max_cache_versions_per_game: Option<u8>,
     pub autoupdate: Option<bool>,
     pub steamExePath: Option<String>,

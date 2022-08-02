@@ -262,7 +262,7 @@ impl REvilThings for REvilManager {
             .as_ref()
             .map_or(REPO_OWNER.to_string(), |it| it.to_string());
 
-        let source: String = match &main.chosen_source {
+        let source: String = match &main.repo_name {
             Some(it) => it.to_string(),
             None => NIGHTLY_RELEASE.to_string(),
         };
@@ -1435,7 +1435,7 @@ pub mod tests {
         let re2_config = evil_manager.config.games.get("RE2").unwrap();
         assert_eq!(re2_config.version_in_use, Some("1234567".to_string()));
         assert_eq!(re2_config.nextgen, Some(true));
-        assert_eq!(re2_config.versions.as_ref().unwrap().len(), 3);
+        assert_eq!(re2_config.versions.as_ref().unwrap().len(), 4);
         assert_eq!(re2_config.runtime, Some(Runtime::OpenVR));
         assert_eq!(
             re2_config

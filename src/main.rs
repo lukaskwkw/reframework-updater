@@ -88,7 +88,7 @@ static mut ARGS: Option<ArgsClap> = None;
 
 static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
 
-static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 3;
+static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 4;
 
 static TIME_TO_CLOSE: u16 = 10;
 // #[tokio::main]
