@@ -2,15 +2,6 @@ use clap::Parser;
 
 use crate::{tomlConf::configStruct::ErrorLevel, ARGS};
 
-pub fn convert_args_to_config() {
-    let args: Vec<_> = std::env::args().collect();
-    for argument in std::env::args() {
-        println!("Argument {}", argument);
-    }
-    if args.len() > 2 && args[1] == "-run" {
-        println!("About to run {} are you happy now?!:) ", args[2]);
-    }
-}
 #[derive(Debug, clap::ValueEnum, Clone, Default)]
 pub enum RunAfter {
     #[default]
@@ -27,7 +18,7 @@ impl RunAfter {
     }
 }
 
-/// Updater for reframework mod games
+/// Updater for Reframework mod games
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct ArgsClap {

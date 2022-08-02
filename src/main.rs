@@ -91,7 +91,7 @@ static STANDARD_TYPE_QUALIFIER: &str = "_TDB";
 static MAX_ZIP_FILES_PER_GAME_CACHE: u8 = 4;
 
 static TIME_TO_CLOSE: u16 = 10;
-// #[tokio::main]
+
 fn main() -> Result<(), Box<dyn error::Error>> {
     unsafe {
         parse_args();
@@ -115,14 +115,13 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     thread::sleep(secs);
     Ok(())
 }
-// TODO Broken download/unzip doesn't no longer alter the game mod config. But maybe we can
+// TODO Broken download/unzip no longer alter the game mod config. But maybe we can
 //      also add option to not launch not updated/unzipped correctly mod. I.e. can be implemented as follow
 //      when selected_game_to_launch is same as for broken download/unzip then terminate process after prompt inside
 //      or press anything on keyboard to continue
 
-// TODO add saving logs by using simple-log
 // TODO maybe instead terminating catchable on error show that error and then ask for press key to exit?
-// TODO when using rescan option, local config can contain different version so it is added to beginning of array versions but then when switching different version from cache
+// TODO when using rescan option, local config can contain different version so it is added to beginning of the array versions but then when loading different version from cache
 //      that particular mod from local config is gone now -> to fix that we should implement zipping local version after any detection or prevent to loading cache for that game (1st preferable)
 //      this bug should not occurs often..
-// TODO be aware that when implementing zipping functionality runtime file can be missing and it can complicate later runtime switching!
+// TODO be aware that when implementing zipping functionality on of the runtime files can be missing and it can complicate later runtime switching!
