@@ -262,7 +262,6 @@ impl Ask for Dialogs {
         let selected_steam_id = selections_h_map
             .get(&selections[selection])
             .unwrap()
-            .clone()
             .to_string();
 
         state.selected_game_to_launch = Some(selected_steam_id);
@@ -721,16 +720,17 @@ mod tests {
         config.games.get_mut("RE8").unwrap().steamId = Some("1196590".to_string());
 
         vec.iter().for_each(|short_name| {
-            let short_name = short_name.clone();
+            let short_n = short_name.to_string();
             let ctx = open_dialog::open_dialog_context();
             ctx.expect().returning(move |selections, _, _| {
                 let pos = selections
                     .iter()
-                    .position(|label| label.contains(short_name))
+                    .position(|label| label.contains(&short_n[..]))
                     .unwrap();
                 Ok(pos)
             });
 
+            let short_name = short_name.to_string();
             let version_pos_and_game_short_name =
                 dialogs.ask_for_runtime_decision_and_change_it(&mut config, &mut state);
 
@@ -741,7 +741,7 @@ mod tests {
                     .as_ref()
                     .unwrap();
                 assert_eq!(pos, &1);
-                assert_eq!(game_short_name, short_name);
+                assert_eq!(game_short_name, &short_name);
             }
             // should also return an error as version_set doesn't have any assets
             if short_name == "RE3" {
