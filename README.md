@@ -2,8 +2,6 @@
 
 # REFresher
 
-![alt text](zombie.svg "Zombie")
-
 ### REFramework updater CLI app
 
 REFresher is a simple CLI app that aims
